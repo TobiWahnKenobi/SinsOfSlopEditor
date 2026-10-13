@@ -6,6 +6,7 @@
         xmlns:nav="clr-namespace:SinsEditor.App.Navigation"
         xmlns:research="clr-namespace:SinsEditor.App.Research"
         xmlns:brushes="clr-namespace:SinsEditor.App.BrushEditing"
+        xmlns:assets="clr-namespace:SinsEditor.App.Assets"
         Title="{Binding WindowTitle}"
         Width="1400" Height="900" MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen">
@@ -16,6 +17,9 @@
         <DataTemplate DataType="{x:Type vm:RaceViewModel}"><views:RaceView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:ProblemsViewModel}"><views:ProblemsView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:GameLogViewModel}"><views:GameLogView /></DataTemplate>
+        <DataTemplate DataType="{x:Type assets:AssetListViewModel}"><views:AssetListView /></DataTemplate>
+        <DataTemplate DataType="{x:Type assets:MeshViewModel}"><views:MeshView /></DataTemplate>
+        <DataTemplate DataType="{x:Type assets:TextureViewModel}"><views:TextureView /></DataTemplate>
         <DataTemplate DataType="{x:Type research:ResearchViewModel}"><views:ResearchView /></DataTemplate>
         <DataTemplate DataType="{x:Type brushes:BrushListViewModel}"><views:BrushListView /></DataTemplate>
         <DataTemplate DataType="{x:Type brushes:BrushEditorViewModel}"><views:BrushEditorView /></DataTemplate>

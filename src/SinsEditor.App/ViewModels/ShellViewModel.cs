@@ -317,6 +317,8 @@ public sealed partial class ShellViewModel : ObservableObject
             if (count > 0) NavItems.Add(new NavItem(category.Name, new CategoryTarget(category.Id), count));
         }
         NavItems.Add(new NavItem("Brushes", new BrushListTarget(), index.Brushes.Entries.Count));
+        NavItems.Add(new NavItem("Meshes", new AssetListTarget(ReferenceKind.Mesh), index.Meshes.Count));
+        NavItems.Add(new NavItem("Textures", new AssetListTarget(ReferenceKind.Texture), index.Textures.Count));
         NavItems.Add(new NavItem("Game log", new GameLogTarget(), null));
         NavItems.Add(new NavItem("Problems", new ProblemsTarget(), Workspace.ProblemCount, isProblems: true));
     }
@@ -332,7 +334,9 @@ public sealed partial class ShellViewModel : ObservableObject
                 || (page is RaceViewModel or Research.ResearchViewModel && item.Target == new CategoryTarget(EntityCategories.Races.Id))
                 || (target is ProblemsTarget && item.IsProblems)
                 || (target is BrushTarget && item.Target is BrushListTarget)
-                || (target is GameLogTarget && item.Target is GameLogTarget);
+                || (target is GameLogTarget && item.Target is GameLogTarget)
+                || (target is MeshTarget && item.Target is AssetListTarget { Kind: ReferenceKind.Mesh })
+                || (target is TextureTarget && item.Target is AssetListTarget { Kind: ReferenceKind.Texture });
         }
     }
 
@@ -349,6 +353,9 @@ public sealed partial class ShellViewModel : ObservableObject
             ResearchTarget r when ws.Index.Entities.TryGetValue(r.RaceName, out var race) => new Research.ResearchViewModel(ws, race, navigate),
             BrushListTarget => new BrushEditing.BrushListViewModel(ws, navigate),
             GameLogTarget g => new GameLogViewModel(ws, g.LogPath, navigate),
+            AssetListTarget a => new Assets.AssetListViewModel(ws, a.Kind, navigate),
+            MeshTarget m => new Assets.MeshViewModel(ws, m.MeshName, navigate, ReloadAsync),
+            TextureTarget t => new Assets.TextureViewModel(ws, t.TextureName, navigate),
             BrushTarget b when b.BrushName is null || ws.Index.Brushes.Contains(b.BrushName) =>
                 new BrushEditing.BrushEditorViewModel(ws, b.BrushName, navigate, ReloadAsync),
             _ => new DashboardViewModel(ws, navigate, ReloadAsync),

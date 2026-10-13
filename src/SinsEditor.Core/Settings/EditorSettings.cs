@@ -24,6 +24,11 @@ public sealed class EditorSettings
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SinsEditor", "settings.json");
 
     public string? GameDirectory { get; set; }
+    /// <summary>
+    /// The global scale meshes are sized against: game units per meter. Scaling a mesh means giving its target size
+    /// in meters; the factor follows from this and the mesh's current size.
+    /// </summary>
+    public double MeshUnitsPerMeter { get; set; } = 1;
     /// <summary>Most recent first.</summary>
     public List<string> RecentMods { get; set; } = [];
     /// <summary>Keyed by full mod path, case-insensitive.</summary>

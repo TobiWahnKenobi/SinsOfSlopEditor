@@ -1,0 +1,38 @@
+<UserControl x:Class="SinsEditor.App.Views.AssetListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:assets="clr-namespace:SinsEditor.App.Assets">
+    <DockPanel Margin="24,24,24,12">
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Title}" Style="{StaticResource PageTitle}" Margin="0,0,0,12" />
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <TextBlock DockPanel.Dock="Right" Text="{Binding CountText}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,0,0" />
+            <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=200}" Width="300" ToolTip="Search by name or file" />
+            <CheckBox Content="Only this mod's files" IsChecked="{Binding OnlyMod}" Margin="12,0,0,0" VerticalAlignment="Center" />
+        </DockPanel>
+        <DataGrid ItemsSource="{Binding View}" Style="{StaticResource ListGrid}" MouseDoubleClick="Grid_MouseDoubleClick" x:Name="Grid">
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Width="72" CanUserSort="False" x:Name="PreviewColumn">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="{x:Type assets:AssetRow}">
+                            <Image Source="{Binding Preview}" MaxWidth="64" MaxHeight="38" Stretch="Uniform" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Name" Width="2*" SortMemberPath="Name">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="{x:Type assets:AssetRow}">
+                            <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                <Hyperlink Command="{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                    <Run Text="{Binding Name, Mode=OneWay}" />
+                                </Hyperlink>
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Used by" Width="90" Binding="{Binding UsedBy}" />
+                <DataGridTextColumn Header="File" Width="2*" Binding="{Binding File}" />
+                <DataGridTextColumn Header="Layer" Width="*" Binding="{Binding Layer}" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</UserControl>

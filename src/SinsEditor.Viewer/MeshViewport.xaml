@@ -1,0 +1,17 @@
+<UserControl x:Class="SinsEditor.Viewer.MeshViewport"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:hx="http://helix-toolkit.org/wpf/SharpDX">
+    <hx:Viewport3DX x:Name="Viewport" BackgroundColor="#FF1E1E22" ShowCoordinateSystem="True" ShowViewCube="True"
+                    EnableSwapChainRendering="False" FXAALevel="Medium"
+                    IsShadowMappingEnabled="False" ShowFrameRate="False">
+        <hx:Viewport3DX.Camera>
+            <hx:PerspectiveCamera x:Name="Camera" Position="0,80,-160" LookDirection="0,-80,160" UpDirection="0,1,0"
+                                  NearPlaneDistance="0.5" FarPlaneDistance="100000" FieldOfView="45" />
+        </hx:Viewport3DX.Camera>
+        <hx:AmbientLight3D Color="#FF505058" />
+        <hx:DirectionalLight3D Direction="-0.4,-1,-0.6" Color="#FFE8E8E8" />
+        <hx:DirectionalLight3D Direction="0.6,0.3,0.8" Color="#FF606070" />
+        <hx:GroupModel3D x:Name="Models" />
+    </hx:Viewport3DX>
+</UserControl>

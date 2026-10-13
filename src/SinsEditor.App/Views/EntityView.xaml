@@ -168,6 +168,9 @@
                                 <Button DockPanel.Dock="Right" Content="&#xE70F;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Padding="6,3" MinWidth="0"
                                         Margin="4,0,0,0" Command="{Binding EditBrushCommand}" ToolTip="Edit brush (change its image)"
                                         Visibility="{Binding CanEditBrush, Converter={StaticResource BoolToVisibility}}" />
+                                <Button DockPanel.Dock="Right" Content="&#xE7B3;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Padding="6,3" MinWidth="0"
+                                        Margin="4,0,0,0" Command="{Binding ViewCommand}" ToolTip="View"
+                                        Visibility="{Binding CanView, Converter={StaticResource BoolToVisibility}}" />
                                 <Grid DockPanel.Dock="Right">
                                     <Button x:Name="PickerButton" Content="&#xE721;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Padding="6,3" MinWidth="0"
                                             Margin="4,0,0,0" Command="{Binding OpenPickerCommand}" ToolTip="Choose from existing items" />

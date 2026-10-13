@@ -59,7 +59,8 @@ public static class SinsValue
         if (raw.Length < 2 || raw[0] != '[' || raw[^1] != ']') return false;
         string inner = raw[1..^1];
         if (inner.Trim().Length == 0) return true;
-        var parts = inner.Split(',');
+        // Entities separate components with commas ([ 1 , 2 ]), meshes with spaces only ([ 1 2 3 ]).
+        var parts = inner.Contains(',') ? inner.Split(',') : inner.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var result = new double[parts.Length];
         for (int i = 0; i < parts.Length; i++)
         {

@@ -221,6 +221,17 @@ The schema says what each field means, which is what turns raw text into forms, 
 - Files are matched to layers by folder name, since logs may come from another machine or another copy of the mod;
   entity files and named entities link to the entity page at the line, brushes to the brush editor.
 
+### Meshes and textures
+
+- Meshes are read from their text form (`MeshData`: materials with diffuse / self-illumination / normal / team colour
+  textures, hardpoints with position and orientation, vertices, triangles); binary meshes go through ConvertData.
+- The 3D view (HelixToolkit, D3DImage rendering so it composes with WPF) mirrors Z for the left-handed meshes, shows the
+  diffuse textures without alpha (a ship's `-cl` alpha is a gloss mask), and marks hardpoints: weapons red, exhausts blue.
+- **Scaling** is by target size: a global scale (game units per meter, an editor setting) and the size the mesh should
+  have along an axis (longest, length Z, width X, height Y). The factor scales vertex and hardpoint positions and the
+  bounds; the result is a new mesh or replaces the mesh in the mod, in the source's format (binary via ConvertData).
+- Texture pages show the image (fitted or 1:1, checkerboard behind alpha) and the brushes and entities using it.
+
 ## Milestones
 
 | # | Milestone | Done when |

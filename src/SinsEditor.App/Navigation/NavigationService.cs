@@ -20,6 +20,13 @@ public sealed record ResearchTarget(string RaceName) : NavTarget;
 
 public sealed record BrushListTarget : NavTarget;
 
+/// <summary>All meshes or all textures (<see cref="Core.Index.ReferenceKind.Mesh"/> or <see cref="Core.Index.ReferenceKind.Texture"/>).</summary>
+public sealed record AssetListTarget(Core.Index.ReferenceKind Kind) : NavTarget;
+
+public sealed record MeshTarget(string MeshName) : NavTarget;
+
+public sealed record TextureTarget(string TextureName) : NavTarget;
+
 /// <summary>The game's debug log: a specific log file, or the best one for the mod.</summary>
 public sealed record GameLogTarget(string? LogPath = null) : NavTarget;
 

@@ -85,6 +85,7 @@ public sealed partial class PropertyRowViewModel : ObservableObject
     public bool CanGoTo => Kind == RowKind.Reference && Hint?.Reference == ReferenceKind.Entity && Error is null && Value.Length > 0;
     public bool IsReadOnly => IsCounter;
     public bool CanEditBrush => Kind == RowKind.Reference && Hint?.Reference == ReferenceKind.Brush && Error is null && Value.Length > 0;
+    public bool CanView => Kind == RowKind.Reference && Hint?.Reference is ReferenceKind.Mesh or ReferenceKind.Texture && Error is null && Value.Length > 0;
 
     /// <summary>What a reference's value means, e.g. the display name of an entity or the text of a string.</summary>
     public string? ValueDescription => Kind == RowKind.Reference ? _owner.Describe(Hint!.Reference!.Value, Value) : null;
@@ -119,6 +120,7 @@ public sealed partial class PropertyRowViewModel : ObservableObject
         OnPropertyChanged(nameof(ValueDescription));
         OnPropertyChanged(nameof(CanGoTo));
         OnPropertyChanged(nameof(CanEditBrush));
+        OnPropertyChanged(nameof(CanView));
     }
 
     private void Commit()
@@ -178,6 +180,13 @@ public sealed partial class PropertyRowViewModel : ObservableObject
     private void EditBrush()
     {
         if (CanEditBrush) _owner.Navigate(new BrushTarget(Value));
+    }
+
+    [RelayCommand]
+    private void View()
+    {
+        if (!CanView) return;
+        _owner.Navigate(Hint!.Reference == ReferenceKind.Mesh ? new MeshTarget(Value) : new TextureTarget(Value));
     }
 
     [RelayCommand]
