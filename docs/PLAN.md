@@ -141,6 +141,33 @@ The schema says what each field means, which is what turns raw text into forms, 
 - **List views:** grid with type-specific columns, filter chips (race, role, armor type, layer, has problems, …),
   free-text search, column sort. Filter presets saved in app settings.
 - **Dashboard:** counts per category and per race, layer summary (mod / base game / overridden), problems by severity, recently edited.
+- **Brush editor:** change icons and pictures by importing images; brushes and their texture atlases are managed for you.
+  - **Pick a brush:** any existing brush (search, preview of all states) or a new one. Reachable from every brush reference
+    (e.g. a ship's `hudIcon` → "Edit brush…"), and from the brush list.
+  - **Brush settings:** name, content type (Simple / States / Margins / MarginsAndStates), per-state image, stretch and
+    content margins for scalable frames. New brushes go into a `.brushes` file of the edited mod (existing or new; a new
+    file is added to `brush.manifest`).
+  - **Change an image by importing one from disk** (PNG, JPG, TGA, DDS, BMP): preview at the brush's size, crop/fit/stretch
+    to the target size, keep the aspect ratio or not. State brushes can get their other states generated from Normal
+    (Disabled = desaturated and dimmed, CursorOver = brightened, Pressed = darkened, Focused = same as Normal),
+    each replaceable by its own image.
+  - **Target texture:** an existing atlas or a new one. Existing atlases from a lower layer are copied into the mod
+    under a new name rather than overridden, so brushes elsewhere that use the original keep working.
+  - **Packing:** when images are added, the atlas is rebuilt from all brushes stored in it, packed with a MaxRects bin packer
+    into the smallest power-of-two texture (up to 4096×4096; a second atlas is started beyond that).
+    - Regions are aligned to 4 px and padded (edge pixels repeated into a gutter), because DXT compresses 4×4 blocks
+      and mipmaps blend neighbours; otherwise icons bleed into each other.
+    - Several brushes or states using identical pixels share one region.
+    - Every brush pointing into a repacked atlas gets its new `pixelBox`, in whatever `.brushes` file of the edited mod
+      it lives. If brushes in lower layers point into the atlas, the editor packs only into free space instead of moving
+      existing regions (or asks to copy the atlas under a new name).
+    - Regions no brush uses any more are reported and dropped on the next repack.
+  - **Writing textures:** DDS in the format the atlas had (in practice DXT5, sometimes DXT1/DXT3 or uncompressed) with a
+    full mip chain, via BCnEncoder.Net; TGA stays TGA. Written through the usual temporary-file-then-move.
+  - **Checks:** brush name collisions across layers, `pixelBox` outside the texture, texture missing, atlas larger than
+    the game handles, brushes defined but used by nothing.
+  - Test-mod facts: 280 of 311 mod textures are DXT5 with mipmaps, power-of-two sizes from 128 to 4096; the game has
+    758 DXT5, 41 DXT3, 25 DXT1, 468 TGA.
 - **Game debug log:** load a log the game wrote to see which errors still need fixing.
   - Folder: `Documents\my games\Ironclad Games\Sins of a Solar Empire Rebellion\Debug` (found via the Documents folder, which may
     be redirected, e.g. to OneDrive), one `log-<process id>.txt` per game run. On the test machine: 125 logs, 505 MB, 2020–2026.
@@ -166,6 +193,7 @@ The schema says what each field means, which is what turns raw text into forms, 
 | M4 | Editing | Typed editors, reference pickers, raw text, undo/redo, save (text or binary), counts + manifest kept in sync |
 | M5 | Create / duplicate / rename / delete | Delete warns about "used by" and offers to clean up; rename updates all references |
 | M5b | Research tree editor | Per-race graphical editor: move subjects, add/remove prerequisites, create subjects, live overlap/cycle checks |
+| M5c | Brush editor | Pick or create a brush, import images from disk (with generated state variants), store them in an existing or new atlas that is repacked optimally; all affected `pixelBox`es updated; DDS written with mipmaps |
 | M6 | Validation | Problems view + dashboard: missing refs, count mismatches, manifest drift, orphans, duplicate/missing strings, parse errors |
 | M6b | Game debug log | Pick a log from the Debug folder; grouped, classified messages with links to files/entities; shown with the problems |
 | M7 | Previews | Texture/brush preview, then mesh preview via HelixToolkit (roadmap items 2–4) |
