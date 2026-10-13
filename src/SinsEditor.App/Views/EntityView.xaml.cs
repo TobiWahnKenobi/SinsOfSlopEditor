@@ -75,6 +75,8 @@ public partial class EntityView : UserControl
         else FlushRawText();
     }
 
+    private void MoreItem_Click(object sender, RoutedEventArgs e) => MoreToggle.IsChecked = false;
+
     // ---- Reference picker ----
 
     private void Picker_Opened(object? sender, EventArgs e)

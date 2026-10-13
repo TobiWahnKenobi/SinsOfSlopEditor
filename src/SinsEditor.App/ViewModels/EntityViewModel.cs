@@ -1,6 +1,7 @@
 using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using SinsEditor.App.Editing;
 using SinsEditor.App.Imaging;
 using SinsEditor.App.Navigation;
@@ -125,6 +126,10 @@ public sealed partial class EntityViewModel : PageViewModel
             IsSaving = false;
         }
     }
+
+    [RelayCommand]
+    private void RequestOperation(EntityOperationKind kind) =>
+        WeakReferenceMessenger.Default.Send(new EntityOperationRequest(kind, Entity.Name));
 
     [RelayCommand]
     private void Open(ReferenceRow? row)

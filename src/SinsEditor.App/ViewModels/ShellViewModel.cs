@@ -4,6 +4,9 @@ using System.Windows;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
+using SinsEditor.App.Editing;
+using SinsEditor.App.Views;
 using SinsEditor.App.Navigation;
 using SinsEditor.Core;
 using SinsEditor.Core.Index;
@@ -50,6 +53,39 @@ public sealed partial class ShellViewModel : ObservableObject
     public ShellViewModel()
     {
         Search = new SearchViewModel(this);
+        WeakReferenceMessenger.Default.Register<ShellViewModel, EntityOperationRequest>(this,
+            static (shell, request) => _ = shell.RunEntityOperationAsync(request));
+    }
+
+    /// <summary>
+    /// Duplicate/new, rename or delete: unsaved edits are saved or discarded first (the operation works on saved files),
+    /// then the dialog shows the planned changes, and after applying the mod is reloaded and the result opened.
+    /// </summary>
+    public async Task RunEntityOperationAsync(EntityOperationRequest request)
+    {
+        if (Workspace is null || !Workspace.Index.Entities.TryGetValue(request.EntityName, out _)) return;
+        string verb = request.Kind.ToString().ToLowerInvariant();
+        if (!await ResolveUnsavedChangesAsync($"you {verb}")) return;
+        if (_options is null || !Workspace.Index.Entities.TryGetValue(request.EntityName, out var entity)) return;
+
+        var dialog = new EntityOperationViewModel(Workspace, request.Kind, entity);
+        var window = new EntityOperationWindow(dialog) { Owner = Application.Current.MainWindow };
+        if (window.ShowDialog() != true || dialog.Plan is not { } plan) return;
+
+        try
+        {
+            plan.Apply(Workspace);
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            MessageBox.Show($"Couldn't apply the changes: {e.Message}\n\nSome files may already have been written. Reload to see the current state.",
+                dialog.Title, MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        var category = EntityCategories.For(entity.EntityType);
+        await OpenAsync(_options);
+        Navigate(dialog.ResultEntity is { } name ? new EntityTarget(name) : new CategoryTarget(category.Id));
     }
 
     public ObservableCollection<HistoryEntry> History { get; } = [];

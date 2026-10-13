@@ -4,7 +4,11 @@
              xmlns:vm="clr-namespace:SinsEditor.App.ViewModels"
              DataContextChanged="OnDataContextChanged">
     <DockPanel Margin="24,24,24,12">
-        <TextBlock DockPanel.Dock="Top" Text="{Binding Title}" Style="{StaticResource PageTitle}" Margin="0,0,0,12" />
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <Button DockPanel.Dock="Right" Content="New…" Command="{Binding NewCommand}" VerticalAlignment="Center"
+                    ToolTip="Create a new entity from a template (the selected row, if any)" />
+            <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}" />
+        </DockPanel>
 
         <!-- Search and filters -->
         <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
@@ -71,7 +75,7 @@
             </WrapPanel>
         </DockPanel>
 
-        <DataGrid x:Name="Grid" ItemsSource="{Binding View}" Style="{StaticResource ListGrid}"
+        <DataGrid x:Name="Grid" ItemsSource="{Binding View}" Style="{StaticResource ListGrid}" SelectedItem="{Binding SelectedRow}"
                   MouseDoubleClick="List_MouseDoubleClick" PreviewKeyDown="List_KeyDown">
             <DataGrid.Columns>
                 <DataGridTemplateColumn Width="48" CanUserSort="False">

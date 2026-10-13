@@ -203,6 +203,24 @@
             <Image DockPanel.Dock="Left" Source="{Binding Icon}" MaxHeight="48" MaxWidth="72" Margin="0,0,16,0" VerticalAlignment="Top"
                    Visibility="{Binding Icon, Converter={StaticResource NullToCollapsed}}" />
             <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Top">
+                <Grid Margin="0,0,12,0">
+                    <ToggleButton x:Name="MoreToggle" Content="&#xE712;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Padding="8,5" MinWidth="0"
+                                  ToolTip="Duplicate, rename or delete" />
+                    <Popup IsOpen="{Binding IsChecked, ElementName=MoreToggle}" StaysOpen="False" PlacementTarget="{Binding ElementName=MoreToggle}"
+                           Placement="Bottom" AllowsTransparency="True">
+                        <Border Style="{StaticResource Card}" Padding="4" Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
+                            <StackPanel MinWidth="180">
+                                <Button Content="Duplicate…" HorizontalContentAlignment="Left" BorderThickness="0" Background="Transparent" Margin="0,1"
+                                        Command="{Binding RequestOperationCommand}" CommandParameter="{x:Static ed:EntityOperationKind.Duplicate}" Click="MoreItem_Click" />
+                                <Button Content="Rename…" HorizontalContentAlignment="Left" BorderThickness="0" Background="Transparent" Margin="0,1"
+                                        Command="{Binding RequestOperationCommand}" CommandParameter="{x:Static ed:EntityOperationKind.Rename}" Click="MoreItem_Click" />
+                                <Button Content="Delete…" HorizontalContentAlignment="Left" BorderThickness="0" Background="Transparent" Margin="0,1"
+                                        Foreground="{StaticResource ErrorBrush}"
+                                        Command="{Binding RequestOperationCommand}" CommandParameter="{x:Static ed:EntityOperationKind.Delete}" Click="MoreItem_Click" />
+                            </StackPanel>
+                        </Border>
+                    </Popup>
+                </Grid>
                 <Button Content="&#xE7A7;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Padding="8,5" MinWidth="0" Margin="0,0,4,0"
                         Command="{Binding UndoCommand}" ToolTip="{Binding UndoToolTip}" />
                 <Button Content="&#xE7A6;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Padding="8,5" MinWidth="0" Margin="0,0,12,0"

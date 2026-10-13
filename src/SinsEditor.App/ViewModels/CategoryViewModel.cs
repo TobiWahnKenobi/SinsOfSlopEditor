@@ -3,6 +3,7 @@ using System.Windows.Data;
 using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using SinsEditor.App.Imaging;
 using SinsEditor.App.Navigation;
 using SinsEditor.Core;
@@ -94,6 +95,19 @@ public sealed partial class CategoryViewModel : PageViewModel
     {
         foreach (var f in Filters) f.Clear();
         SearchText = "";
+    }
+
+    [ObservableProperty]
+    private EntityRow? _selectedRow;
+
+    /// <summary>New entity from a template: the selected row, or the first one.</summary>
+    [RelayCommand]
+    private void New()
+    {
+        var template = SelectedRow ?? View.Cast<EntityRow>().FirstOrDefault() ?? Items.FirstOrDefault();
+        if (template != null)
+            WeakReferenceMessenger.Default.Send(
+                new Editing.EntityOperationRequest(Editing.EntityOperationKind.Duplicate, template.Name));
     }
 
     [RelayCommand]
