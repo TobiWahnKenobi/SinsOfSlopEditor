@@ -12,7 +12,10 @@ public sealed record MetricCard(string Label, string Value, NavTarget Target);
 
 public sealed record RaceRow(string DisplayName, string Name, int CapitalShips, int Titans, int Frigates, int PlanetModules, int Research, EntityTarget Target);
 
-public sealed record ProblemGroup(string Code, string Title, ProblemSeverity Severity, int Count, string Example, ProblemsTarget Target, bool CanFixAll);
+public sealed record ProblemGroup(string Code, string Title, ProblemSeverity Severity, int Count, string Example, ProblemsTarget Target, bool CanFixAll)
+{
+    public string FixText => Code == ProblemCodes.MissingString ? "Import from base game" : "Fix all";
+}
 
 public sealed record LayerRow(string Name, string Kind, int Files, int ActiveEntities, int Overrides);
 
@@ -56,7 +59,8 @@ public sealed partial class DashboardViewModel : PageViewModel
             .GroupBy(p => p.Code)
             .Select(g => new ProblemGroup(g.Key, ProblemCodes.Title(g.Key), g.Max(p => p.Severity),
                 g.Key == ProblemCodes.ConventionMismatch ? workspace.ConventionMismatches.Count : g.Count(),
-                g.First().Message, new ProblemsTarget(g.Key), g.Key is ProblemCodes.ConventionMismatch or ProblemCodes.DuplicateString))
+                g.First().Message, new ProblemsTarget(g.Key),
+                g.Key is ProblemCodes.ConventionMismatch or ProblemCodes.DuplicateString or ProblemCodes.MissingString))
             .OrderByDescending(g => g.Severity)
             .ThenByDescending(g => g.Count)
             .ToList();
@@ -96,7 +100,33 @@ public sealed partial class DashboardViewModel : PageViewModel
             case ProblemCodes.DuplicateString:
                 await FixDuplicateStringsAsync();
                 break;
+            case ProblemCodes.MissingString:
+                await ImportMissingStringsAsync();
+                break;
         }
+    }
+
+    private async Task ImportMissingStringsAsync()
+    {
+        var importable = await Task.Run(() => StringFixes.FindImportable(_workspace));
+        int missing = _workspace.Problems.Where(p => p.Code == ProblemCodes.MissingString).Select(p => p.Message).Distinct().Count();
+        if (importable.Count == 0)
+        {
+            MessageBox.Show("None of the missing strings exist in the base game or the base mods in this language.",
+                "Import missing strings", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var sources = importable.GroupBy(i => i.LayerName).Select(g => $"{g.Count():N0} from {g.Key}");
+        var answer = MessageBox.Show(
+            $"{importable.Count:N0} of the missing strings exist in a lower layer ({string.Join(", ", sources)}).\n\n" +
+            $"Add them with their text to {_workspace.ModName}'s String/{_workspace.Index.Language}.str? " +
+            "NumStrings is updated; nothing else in the file changes.",
+            "Import missing strings", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.OK) return;
+
+        int added = await Task.Run(() => StringFixes.ImportStrings(_workspace, importable));
+        MessageBox.Show($"Imported {importable.Count:N0} strings ({added:N0} entries including variants).", "Import missing strings");
+        await _reload();
     }
 
     private async Task FixDuplicateStringsAsync()

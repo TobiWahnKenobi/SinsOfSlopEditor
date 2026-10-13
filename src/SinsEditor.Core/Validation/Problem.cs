@@ -20,6 +20,7 @@ public static class ProblemCodes
     public const string ManifestEntryWithoutFile = "manifest-entry-without-file";
     public const string EntityNotInManifest = "entity-not-in-manifest";
     public const string MissingReference = "missing-reference";
+    public const string MissingString = "missing-string";
     public const string DuplicateString = "duplicate-string";
     public const string ScatteredString = "scattered-string";
     public const string StringCountMismatch = "string-count-mismatch";
@@ -36,6 +37,7 @@ public static class ProblemCodes
         ManifestEntryWithoutFile => "Manifest entry without file",
         EntityNotInManifest => "Entity not in manifest",
         MissingReference => "Missing reference",
+        MissingString => "Missing string",
         DuplicateString => "Duplicate string",
         ScatteredString => "String defined in several places",
         StringCountMismatch => "String count mismatch",

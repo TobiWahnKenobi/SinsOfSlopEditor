@@ -48,6 +48,8 @@ public sealed class ModIndex
     private readonly List<RaceItem> _raceItems = [];
     private readonly List<Problem> _problems = [];
     private readonly List<string> _manifestEntries = [];
+    /// <summary>String IDs of every layer's table for the language; only used to learn which keys are string references.</summary>
+    private readonly HashSet<string> _anyLayerStringIds = new(StringComparer.OrdinalIgnoreCase);
 
     private ModIndex(LayerStack stack, string language)
     {
@@ -199,6 +201,15 @@ public sealed class ModIndex
         if (Languages.ResolveStringFile(Stack, Language) is not { } file) return;
         var doc = SinsDocument.Load(await cache.GetTextPathAsync(file.AbsolutePath, ct));
         Strings = StringTable.Load(Language, file, doc);
+        // Lower layers' tables too: a mod whose own table lacks most strings must still have NameStringID & co.
+        // recognised as string references, or its missing strings would go unnoticed.
+        foreach (var layer in Stack.Layers)
+        {
+            string path = Languages.StringFilePath(layer, Language);
+            if (layer.GetAbsolutePath(path) is not { } abs) continue;
+            var lower = abs == file.AbsolutePath ? Strings : StringTable.Load(Language, new ResolvedFile(path, layer, abs, []), SinsDocument.Load(abs));
+            _anyLayerStringIds.UnionWith(lower.Ids);
+        }
         // Consecutive repeats with different text are variants (the game's IDS_TAUNT_ lines) and fine.
         foreach (var dup in Strings.Duplicates)
         {
@@ -283,7 +294,8 @@ public sealed class ModIndex
             totals[context] = totals.GetValueOrDefault(context) + 1;
             foreach (var kind in Enum.GetValues<ReferenceKind>())
             {
-                if (Exists(kind, value)) hits[(context, kind)] = hits.GetValueOrDefault((context, kind)) + 1;
+                bool exists = kind == ReferenceKind.String ? Exists(kind, value) || _anyLayerStringIds.Contains(value) : Exists(kind, value);
+                if (exists) hits[(context, kind)] = hits.GetValueOrDefault((context, kind)) + 1;
             }
         }
         foreach (var group in hits.GroupBy(h => h.Key.Key))
@@ -310,7 +322,7 @@ public sealed class ModIndex
                     if (_incoming.TryGetValue((r.Kind, r.Target), out var list)) list.RemoveAll(removed.Contains);
                 }
             }
-            _problems.RemoveAll(p => p.Code == ProblemCodes.MissingReference
+            _problems.RemoveAll(p => p.Code is ProblemCodes.MissingReference or ProblemCodes.MissingString
                 && string.Equals(p.RelativePath, old.File.RelativePath, StringComparison.OrdinalIgnoreCase));
         }
         _entities[updated.Name] = updated;
@@ -341,7 +353,8 @@ public sealed class ModIndex
             list.Add(reference);
             if (!reference.Resolved)
             {
-                _problems.Add(new Problem(ProblemSeverity.Error, ProblemCodes.MissingReference,
+                _problems.Add(new Problem(ProblemSeverity.Error,
+                    kind == ReferenceKind.String ? ProblemCodes.MissingString : ProblemCodes.MissingReference,
                     $"{entity.Name}: {lines[i].Key} points to {kind.ToString().ToLowerInvariant()} '{target}', which doesn't exist.",
                     entity.File.RelativePath, i));
             }
