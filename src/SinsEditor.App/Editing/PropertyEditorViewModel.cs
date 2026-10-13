@@ -35,7 +35,31 @@ public sealed partial class PropertyEditorViewModel : ObservableObject
         session.Changed += OnSessionChanged;
     }
 
+    private IReadOnlyList<Core.Validation.Problem> _problems = [];
+
     public EntityEditSession Session { get; }
+
+    /// <summary>Marks the rows of lines with problems (0-based line indices as in the file).</summary>
+    public void SetProblems(IReadOnlyList<Core.Validation.Problem> problems)
+    {
+        _problems = problems;
+        ApplyProblems();
+    }
+
+    private void ApplyProblems()
+    {
+        var byLine = _problems.Where(p => p.LineIndex != null).ToLookup(p => p.LineIndex!.Value);
+        foreach (var row in Rows)
+        {
+            var lineProblems = byLine[row.LineIndex].ToList();
+            row.ProblemText = lineProblems.Count == 0 ? null : string.Join("\n", lineProblems.Select(p => p.Message));
+            row.ProblemIsError = lineProblems.Any(p => p.Severity == Core.Validation.ProblemSeverity.Error);
+        }
+    }
+
+    /// <summary>The row showing a line, or the closest row above it (blank lines have no row).</summary>
+    public PropertyRowViewModel? RowForLine(int lineIndex) =>
+        Rows.LastOrDefault(r => r.LineIndex <= lineIndex) ?? Rows.FirstOrDefault();
     public ObservableCollection<PropertyRowViewModel> Rows { get; } = [];
     public ICollectionView View { get; }
 
@@ -80,6 +104,7 @@ public sealed partial class PropertyEditorViewModel : ObservableObject
             else
                 Rows.Add(new PropertyRowViewModel(this, i, context, kind, hint, null, -1, isCounter: false));
         }
+        ApplyProblems();
     }
 
     private static RowKind KindOf(SinsLine line, PropertyHint? hint)

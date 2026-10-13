@@ -143,5 +143,16 @@ public sealed class SaveTests : IAsyncLifetime
         Assert.DoesNotContain(ws.Index.IncomingReferences(ReferenceKind.Mesh, meshTarget), r => r.Source.Name == "FrigateTechScout");
         Assert.Contains(ws.Problems, p => p.Message.Contains("NoSuchMesh"));
         Assert.True(ws.HasProblems(updated));
+
+        // The entity page lists the problem in its banner, and clicking it asks to show the meshName line.
+        var vm = new SinsEditor.App.ViewModels.EntityViewModel(ws, updated, _ => { });
+        var row = Assert.Single(vm.Problems, p => p.Message.Contains("NoSuchMesh"));
+        Assert.StartsWith("meshName points to", row.Message);
+        Assert.Equal(mesh, row.LineIndex);
+        int? shown = null;
+        vm.ShowLineRequested += line => shown = line;
+        vm.ShowProblemCommand.Execute(row);
+        Assert.Equal(mesh, shown);
+        Assert.True(vm.Editor.RowForLine(mesh)!.HasProblem);
     }
 }

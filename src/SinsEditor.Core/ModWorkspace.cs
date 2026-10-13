@@ -58,6 +58,21 @@ public sealed class ModWorkspace
 
     public bool HasProblems(EntityRecord entity) => ProblemsIn(entity.File.RelativePath).Any();
 
+    /// <summary>
+    /// Every problem about one entity, information included, with its encoding/line-ending mismatch if it has one
+    /// (those are grouped into a single problem in <see cref="Problems"/>).
+    /// </summary>
+    public IReadOnlyList<Problem> ProblemsOf(EntityRecord entity)
+    {
+        string path = entity.File.RelativePath;
+        var list = Problems
+            .Where(p => p.Code != ProblemCodes.ConventionMismatch && string.Equals(p.RelativePath, path, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        if (entity.File.Layer.IsEditable && _conventionMismatches.FirstOrDefault(m => string.Equals(m.RelativePath, path, StringComparison.OrdinalIgnoreCase)) is { } mismatch)
+            list.Add(new Problem(ProblemSeverity.Warning, ProblemCodes.ConventionMismatch, $"File uses {mismatch.Reason}. Saving fixes it.", path));
+        return list.OrderByDescending(p => p.Severity).ThenBy(p => p.LineIndex ?? -1).ToList();
+    }
+
     /// <summary>Warnings and errors, counting each file with wrong encoding or line endings separately.</summary>
     public int ProblemCount =>
         Problems.Count(p => p.Severity != ProblemSeverity.Info && p.Code != ProblemCodes.ConventionMismatch) + ConventionMismatches.Count;

@@ -34,12 +34,14 @@ public partial class EntityView : UserControl
         {
             FlushRawText();
             _vm.TextReloadRequested -= ReloadRawText;
+            _vm.ShowLineRequested -= ShowLine;
             _vm.FlushRawText = null;
         }
         _vm = e.NewValue as EntityViewModel;
         if (_vm != null)
         {
             _vm.TextReloadRequested += ReloadRawText;
+            _vm.ShowLineRequested += ShowLine;
             _vm.FlushRawText = FlushRawText;
             ReloadRawText();
         }
@@ -76,6 +78,36 @@ public partial class EntityView : UserControl
     }
 
     private void MoreItem_Click(object sender, RoutedEventArgs e) => MoreToggle.IsChecked = false;
+
+    /// <summary>Shows a line in the form: Properties tab, no filter, scrolled to and selected.</summary>
+    private void ShowLine(int lineIndex)
+    {
+        if (_vm is null) return;
+        FlushRawText();
+        Tabs.SelectedIndex = 0;
+        _vm.Editor.FilterText = "";
+        if (_vm.Editor.RowForLine(lineIndex) is not { } row) return;
+        // Wait for the tab switch and filter refresh to lay out before scrolling.
+        Dispatcher.BeginInvoke(() =>
+        {
+            PropertyList.SelectedItem = row;
+            // Item-based scrolling: put the row a few rows below the top so the block it's in stays visible.
+            int index = PropertyList.Items.IndexOf(row);
+            if (FindChild<ScrollViewer>(PropertyList) is { } scroller) scroller.ScrollToVerticalOffset(Math.Max(0, index - 4));
+            else PropertyList.ScrollIntoView(row);
+        }, DispatcherPriority.Loaded);
+    }
+
+    private static T? FindChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T match) return match;
+            if (FindChild<T>(child) is { } nested) return nested;
+        }
+        return null;
+    }
 
     // ---- Reference picker ----
 

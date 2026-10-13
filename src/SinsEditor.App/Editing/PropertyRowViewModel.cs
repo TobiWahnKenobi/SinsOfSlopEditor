@@ -35,6 +35,16 @@ public sealed partial class PropertyRowViewModel : ObservableObject
     [ObservableProperty]
     private bool _isPickerOpen;
 
+    /// <summary>Problems reported for this line (from the last validation), shown as a marker with tooltip.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasProblem))]
+    private string? _problemText;
+
+    [ObservableProperty]
+    private bool _problemIsError;
+
+    public bool HasProblem => ProblemText != null;
+
     [ObservableProperty]
     private string _pickerQuery = "";
 

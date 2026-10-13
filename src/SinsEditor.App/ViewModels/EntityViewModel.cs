@@ -18,6 +18,13 @@ public sealed record ReferenceRow(string Key, string Kind, string Target, string
 
 public sealed record ReferenceGroup(string Title, IReadOnlyList<ReferenceRow> Rows);
 
+/// <summary>A problem shown in the entity's banner; <paramref name="LineIndex"/> is null when it isn't about a line.</summary>
+public sealed record EntityProblemRow(Core.Validation.ProblemSeverity Severity, string Title, string Message, int? LineIndex)
+{
+    public bool HasLine => LineIndex != null;
+    public string LineText => LineIndex is { } line ? $"line {line + 1}" : "";
+}
+
 /// <summary>
 /// Entity page: form editor, connected items both ways, and raw text. Edits live in the workspace's edit session
 /// for the entity, so every page showing it shares them and they survive navigating away.
@@ -50,6 +57,35 @@ public sealed partial class EntityViewModel : PageViewModel
 
     [ObservableProperty]
     private string? _statusMessage;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasProblems), nameof(ProblemSummary), nameof(ProblemsAreErrors))]
+    private IReadOnlyList<EntityProblemRow> _problems = [];
+
+    public bool HasProblems => Problems.Count > 0;
+    public bool ProblemsAreErrors => Problems.Any(p => p.Severity == Core.Validation.ProblemSeverity.Error);
+
+    public string ProblemSummary
+    {
+        get
+        {
+            int errors = Problems.Count(p => p.Severity == Core.Validation.ProblemSeverity.Error);
+            int others = Problems.Count - errors;
+            string total = Problems.Count == 1 ? "1 problem" : $"{Problems.Count} problems";
+            return errors > 0 && others > 0
+                ? $"{total} ({errors} {(errors == 1 ? "error" : "errors")}, {others} {(others == 1 ? "warning" : "warnings")})"
+                : total;
+        }
+    }
+
+    /// <summary>Asks the view to show a line in the form (switch tab, clear the filter, scroll, select).</summary>
+    public event Action<int>? ShowLineRequested;
+
+    [RelayCommand]
+    private void ShowProblem(EntityProblemRow? row)
+    {
+        if (row?.LineIndex is { } line) ShowLineRequested?.Invoke(line);
+    }
 
     [ObservableProperty]
     private bool _isSaving;
@@ -194,6 +230,15 @@ public sealed partial class EntityViewModel : PageViewModel
                     new EntityTarget(r.Source.Name), r.LineIndex + 1))
                 .ToList()))
             .ToList();
+
+        // Messages start with the entity's name, which is redundant on its own page.
+        string prefix = entity.Name + ": ";
+        var problems = _workspace.ProblemsOf(entity);
+        Problems = problems
+            .Select(p => new EntityProblemRow(p.Severity, Core.Validation.ProblemCodes.Title(p.Code),
+                p.Message.StartsWith(prefix, StringComparison.Ordinal) ? p.Message[prefix.Length..] : p.Message, p.LineIndex))
+            .ToList();
+        Editor.SetProblems(problems);
 
         OnPropertyChanged(nameof(Subtitle));
         OnPropertyChanged(nameof(HasNoUsedBy));

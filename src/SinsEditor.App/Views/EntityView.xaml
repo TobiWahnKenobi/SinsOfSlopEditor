@@ -45,6 +45,17 @@
             <Setter Property="VerticalAlignment" Value="Center" />
             <Setter Property="TextTrimming" Value="CharacterEllipsis" />
             <Setter Property="ToolTip" Value="{Binding Context}" />
+            <Style.Triggers>
+                <!-- Lines with problems: coloured key, the problem as tooltip. -->
+                <DataTrigger Binding="{Binding HasProblem}" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                    <Setter Property="ToolTip" Value="{Binding ProblemText}" />
+                    <Setter Property="FontWeight" Value="SemiBold" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding ProblemIsError}" Value="True">
+                    <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
+                </DataTrigger>
+            </Style.Triggers>
         </Style>
         <Style x:Key="EditorBox" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
             <Setter Property="MinHeight" Value="28" />
@@ -257,6 +268,65 @@
             </StackPanel>
         </DockPanel>
 
+        <Border DockPanel.Dock="Top" CornerRadius="6" Padding="12,8" Margin="0,0,0,8" BorderThickness="1"
+                Visibility="{Binding HasProblems, Converter={StaticResource BoolToVisibility}}">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="{DynamicResource SystemFillColorCautionBackgroundBrush}" />
+                    <Setter Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ProblemsAreErrors}" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource SystemFillColorCriticalBackgroundBrush}" />
+                            <Setter Property="BorderBrush" Value="{StaticResource ErrorBrush}" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" FontWeight="SemiBold" Margin="0,0,0,4">
+                    <Run Text="&#xE7BA;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                    <Run Text="{Binding ProblemSummary, Mode=OneWay}" />
+                </TextBlock>
+                <ScrollViewer MaxHeight="150" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Problems}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:EntityProblemRow}">
+                                <DockPanel Margin="0,2">
+                                    <TextBlock DockPanel.Dock="Left" Width="20" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Margin="0,2,0,0">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Text" Value="&#xE7BA;" />
+                                                <Setter Property="Foreground" Value="{StaticResource WarningBrush}" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding Severity}" Value="Error">
+                                                        <Setter Property="Text" Value="&#xEA39;" />
+                                                        <Setter Property="Foreground" Value="{StaticResource ErrorBrush}" />
+                                                    </DataTrigger>
+                                                    <DataTrigger Binding="{Binding Severity}" Value="Info">
+                                                        <Setter Property="Text" Value="&#xE946;" />
+                                                        <Setter Property="Foreground" Value="{StaticResource InfoBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBlock TextWrapping="Wrap">
+                                        <Hyperlink Command="{Binding DataContext.ShowProblemCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                   CommandParameter="{Binding}" IsEnabled="{Binding HasLine}" ToolTip="Show this line">
+                                            <Run Text="{Binding LineText, Mode=OneWay}" />
+                                        </Hyperlink>
+                                        <Run Text="{Binding Title, Mode=OneWay}" FontWeight="SemiBold" />
+                                        <Run Text="·" />
+                                        <Run Text="{Binding Message, Mode=OneWay}" />
+                                    </TextBlock>
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+
         <Border DockPanel.Dock="Top" Background="{DynamicResource SystemFillColorAttentionBackgroundBrush}" CornerRadius="6" Padding="10,6" Margin="0,0,0,8"
                 Visibility="{Binding OverrideNotice, Converter={StaticResource NullToCollapsed}}">
             <TextBlock Text="{Binding OverrideNotice}" TextWrapping="Wrap" />
@@ -269,20 +339,37 @@
                 <DockPanel Margin="0,12,0,0">
                     <TextBox DockPanel.Dock="Top" Text="{Binding Editor.FilterText, UpdateSourceTrigger=PropertyChanged, Delay=200}"
                              Width="320" HorizontalAlignment="Left" Margin="0,0,0,8" ToolTip="Filter properties by key or value" />
-                    <ItemsControl ItemsSource="{Binding Editor.View}" ItemTemplateSelector="{StaticResource RowTemplates}"
-                                  VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
-                                  ScrollViewer.CanContentScroll="True" KeyboardNavigation.TabNavigation="Cycle">
-                        <ItemsControl.Template>
-                            <ControlTemplate TargetType="ItemsControl">
-                                <ScrollViewer CanContentScroll="True" VerticalScrollBarVisibility="Auto" Padding="0,0,8,0">
-                                    <ItemsPresenter />
-                                </ScrollViewer>
-                            </ControlTemplate>
-                        </ItemsControl.Template>
-                        <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate><VirtualizingStackPanel /></ItemsPanelTemplate>
-                        </ItemsControl.ItemsPanel>
-                    </ItemsControl>
+                    <ListBox x:Name="PropertyList" ItemsSource="{Binding Editor.View}" ItemTemplateSelector="{StaticResource RowTemplates}"
+                             VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                             ScrollViewer.CanContentScroll="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             KeyboardNavigation.TabNavigation="Cycle" BorderThickness="0" Background="Transparent">
+                        <ListBox.ItemContainerStyle>
+                            <Style TargetType="ListBoxItem" BasedOn="{StaticResource {x:Type ListBoxItem}}">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="4,0,8,0" />
+                                <Setter Property="Margin" Value="0" />
+                                <Setter Property="MinHeight" Value="0" />
+                                <!-- Rows hold editors; the selection only marks the row a problem link jumped to. -->
+                                <Setter Property="Focusable" Value="False" />
+                                <Setter Property="Template">
+                                    <Setter.Value>
+                                        <ControlTemplate TargetType="ListBoxItem">
+                                            <Border x:Name="Row" Background="Transparent" BorderThickness="3,0,0,0" BorderBrush="Transparent"
+                                                    Padding="{TemplateBinding Padding}">
+                                                <ContentPresenter />
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsSelected" Value="True">
+                                                    <Setter TargetName="Row" Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                                    <Setter TargetName="Row" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Setter.Value>
+                                </Setter>
+                            </Style>
+                        </ListBox.ItemContainerStyle>
+                    </ListBox>
                 </DockPanel>
             </TabItem>
             <TabItem Header="Connected items">
