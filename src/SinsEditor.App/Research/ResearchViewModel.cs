@@ -74,6 +74,9 @@ public sealed record SubjectChoice(string Name, string Display)
 
 public sealed record IssueRow(ProblemSeverity Severity, string Message, string? Subject);
 
+/// <summary>A research subject that isn't on the tree: on the race's list without a valid place, or not on its list at all.</summary>
+public sealed record UnassignedRow(string Name, string Display, string Detail, bool IsOnRaceList);
+
 /// <summary>
 /// Graphical research tree editor for one race, drawn from the game's own layout and images.
 /// Every subject is edited through the workspace's edit sessions, so changes show up everywhere and are saved with "Save all".
@@ -116,6 +119,17 @@ public sealed partial class ResearchViewModel : PageViewModel
     [ObservableProperty]
     private string? _statusMessage;
 
+    [ObservableProperty]
+    private string _unassignedFilter = "";
+
+    /// <summary>Also list subjects other races use (hidden by default: there are many and they rarely belong here).</summary>
+    [ObservableProperty]
+    private bool _includeOtherRaces;
+
+    /// <summary>Also list subjects that only exist in the base game (hidden by default: mods often leave hundreds unused).</summary>
+    [ObservableProperty]
+    private bool _includeBaseGame;
+
     public ResearchViewModel(ModWorkspace workspace, EntityRecord race, Action<NavTarget> navigate)
     {
         _workspace = workspace;
@@ -139,7 +153,8 @@ public sealed partial class ResearchViewModel : PageViewModel
     public ObservableCollection<CellVisual> Cells { get; } = [];
     public ObservableCollection<SubjectVisual> Subjects { get; } = [];
     public ObservableCollection<ArrowVisual> Arrows { get; } = [];
-    public ObservableCollection<SubjectChoice> Unplaced { get; } = [];
+    public ObservableCollection<UnassignedRow> Unassigned { get; } = [];
+    public string UnassignedSummary { get; private set; } = "";
     public ObservableCollection<IssueRow> Issues { get; } = [];
     public ObservableCollection<PrerequisiteRow> SelectedPrerequisites { get; } = [];
     public ObservableCollection<string> SelectedUnlocks { get; } = [];
@@ -181,6 +196,7 @@ public sealed partial class ResearchViewModel : PageViewModel
     {
         if (_applying) return;
         Tree = Build();
+        Watch();
         Refresh();
         OnPropertyChanged(nameof(IsDirty));
     }
@@ -265,8 +281,7 @@ public sealed partial class ResearchViewModel : PageViewModel
             if (ArrowFor(link) is { } arrow) Arrows.Add(arrow);
         }
 
-        Unplaced.Clear();
-        foreach (var s in tree.Unplaced) Unplaced.Add(new SubjectChoice(s.Name, $"{index.DisplayName(s.Entity) ?? s.Name}  ({s.Field ?? "no field"} {s.Block}, {s.Column}/{s.Row})"));
+        RefreshUnassigned();
         AllSubjects = tree.Subjects
             .Select(s => new SubjectChoice(s.Name, $"{index.DisplayName(s.Entity) ?? s.Name}  ({ResearchTree.FieldTitle(s.Field ?? "?")})"))
             .OrderBy(c => c.Display, StringComparer.CurrentCultureIgnoreCase).ToList();
@@ -278,6 +293,44 @@ public sealed partial class ResearchViewModel : PageViewModel
 
         SelectedSubject = Subjects.FirstOrDefault(s => s.Subject.Name == selectedName);
         RefreshSelection();
+    }
+
+    partial void OnUnassignedFilterChanged(string value) => RefreshUnassigned();
+    partial void OnIncludeOtherRacesChanged(bool value) => RefreshUnassigned();
+    partial void OnIncludeBaseGameChanged(bool value) => RefreshUnassigned();
+
+    private void RefreshUnassigned()
+    {
+        var index = _workspace.Index;
+        var tree = Tree;
+        var onTree = tree.Subjects.Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var rows = new List<UnassignedRow>();
+
+        foreach (var s in tree.Unplaced)
+        {
+            string reason = !s.HasPosition ? "on this race's list, no position"
+                : $"on this race's list, but {ResearchTree.FieldTitle(s.Field!)} block {s.Block} column {s.Column} row {s.Row} isn't on the screen";
+            rows.Add(new UnassignedRow(s.Name, index.DisplayName(s.Entity) ?? s.Name, reason, IsOnRaceList: true));
+        }
+
+        var others = index.ActiveEntities
+            .Where(e => e.EntityType == "ResearchSubject" && !onTree.Contains(e.Name))
+            .Where(e => IncludeBaseGame || e.File.Layer.Kind != Core.FileSystem.LayerKind.BaseGame)
+            .Select(e => (Entity: e, Owners: index.RacesOwning(e.Name).Where(r => r.Name != Race.Name).ToList()))
+            .Where(x => IncludeOtherRaces || x.Owners.Count == 0)
+            .Select(x => new UnassignedRow(x.Entity.Name, index.DisplayName(x.Entity) ?? x.Entity.Name,
+                x.Owners.Count == 0 ? "not used by any race" : "used by " + string.Join(", ", x.Owners.Select(r => index.DisplayName(r) ?? r.Name)),
+                IsOnRaceList: false))
+            .OrderBy(r => r.Display, StringComparer.CurrentCultureIgnoreCase);
+        rows.AddRange(others);
+
+        var filtered = rows.Where(r => UnassignedFilter.Length == 0
+            || r.Display.Contains(UnassignedFilter, StringComparison.CurrentCultureIgnoreCase)
+            || r.Name.Contains(UnassignedFilter, StringComparison.OrdinalIgnoreCase)).ToList();
+        Unassigned.Clear();
+        foreach (var r in filtered.Take(300)) Unassigned.Add(r);
+        UnassignedSummary = filtered.Count > 300 ? $"Showing 300 of {filtered.Count}; type to narrow down." : $"{filtered.Count} subjects";
+        OnPropertyChanged(nameof(UnassignedSummary));
     }
 
     private void RefreshSelection()
@@ -395,27 +448,55 @@ public sealed partial class ResearchViewModel : PageViewModel
         return null;
     }
 
-    /// <summary>Moves a subject to a cell of the selected field; a subject already there swaps into the old place.</summary>
+    /// <summary>
+    /// Moves a subject to a cell of the selected field. A subject already there swaps into the old place.
+    /// A subject that isn't on the race's research list yet is added to it first.
+    /// </summary>
     public void MoveSubject(string subjectName, ResearchBlock block, int column, int row)
     {
-        if (Tree.Subject(subjectName) is not { } subject) return;
-        if (subject.Field == block.Field && subject.Block == block.Index && subject.Column == column && subject.Row == row) return;
+        var subject = Tree.Subject(subjectName);
+        if (subject is null && !_workspace.Index.Entities.ContainsKey(subjectName)) return;
+        if (subject is { } s0 && s0.Field == block.Field && s0.Block == block.Index && s0.Column == column && s0.Row == row && Tree.CellOf(s0) != null) return;
         var occupant = Tree.Subjects.FirstOrDefault(s => s != subject && s.Field == block.Field && s.Block == block.Index && s.Column == column && s.Row == row);
+        bool canSwap = subject != null && Tree.CellOf(subject) != null;
+        if (occupant != null && !canSwap)
+        {
+            StatusMessage = $"That cell is taken by {_workspace.Index.DisplayName(occupant.Entity) ?? occupant.Name}. Drop on a free cell.";
+            return;
+        }
+        var entity = subject?.Entity ?? _workspace.Index.Entities[subjectName];
+        StatusMessage = null;
         Edit(() =>
         {
-            if (occupant != null && subject.HasPosition)
-                Record(occupant, session => ResearchEdits.Move(session, subject.Field!, subject.Block!.Value, subject.Column!.Value, subject.Row!.Value));
-            Record(subject, session => ResearchEdits.Move(session, block.Field, block.Index, column, row));
+            if (subject is null) Record(Race, session => ResearchEdits.AddToResearchList(session, subjectName));
+            if (occupant != null)
+                Record(occupant.Entity, session => ResearchEdits.Move(session, subject!.Field!, subject.Block!.Value, subject.Column!.Value, subject.Row!.Value));
+            Record(entity, session => ResearchEdits.Move(session, block.Field, block.Index, column, row));
         });
-        StatusMessage = occupant is null ? null : $"Swapped with {_workspace.Index.DisplayName(occupant.Entity) ?? occupant.Name}.";
+        // Edit reports errors in StatusMessage; otherwise say what happened besides the move itself.
+        if (StatusMessage is null && occupant != null) StatusMessage = $"Swapped with {_workspace.Index.DisplayName(occupant.Entity) ?? occupant.Name}.";
+        else if (StatusMessage is null && subject is null) StatusMessage = $"Added {_workspace.Index.DisplayName(entity) ?? subjectName} to the research list.";
         SelectByName(subjectName);
     }
+
+    /// <summary>Takes a subject off the tree: removes it from the race's research list. The entity stays.</summary>
+    public void RemoveFromTree(string subjectName)
+    {
+        if (Tree.Subject(subjectName) is not { } subject) return;
+        Edit(() => Record(Race, session => ResearchEdits.RemoveFromResearchList(session, subjectName)));
+        if (SelectedSubject?.Subject.Name == subjectName) SelectedSubject = null;
+        int users = Tree.Subjects.Count(s => s.Prerequisites.Any(p => p.Subject.Equals(subjectName, StringComparison.OrdinalIgnoreCase)));
+        StatusMessage = $"Removed {_workspace.Index.DisplayName(subject.Entity) ?? subjectName} from the research list" +
+                        (users > 0 ? $"; {users} subjects still require it." : ".");
+    }
+
+    public bool IsOnTree(string subjectName) => Tree.Subject(subjectName) != null;
 
     /// <summary>Makes <paramref name="dependent"/> require <paramref name="prerequisite"/>.</summary>
     public void AddLink(string prerequisite, string dependent)
     {
         if (string.Equals(prerequisite, dependent, StringComparison.OrdinalIgnoreCase) || Tree.Subject(dependent) is not { } target) return;
-        Edit(() => Record(target, session => ResearchEdits.AddPrerequisite(session, prerequisite)));
+        Edit(() => Record(target.Entity, session => ResearchEdits.AddPrerequisite(session, prerequisite)));
         SelectByName(dependent);
     }
 
@@ -430,14 +511,14 @@ public sealed partial class ResearchViewModel : PageViewModel
     private void RemovePrerequisite(PrerequisiteRow? row)
     {
         if (row is null || SelectedSubject?.Subject is not { } s) return;
-        Edit(() => Record(s, session => ResearchEdits.RemovePrerequisite(session, row.Prerequisite.Subject)));
+        Edit(() => Record(s.Entity, session => ResearchEdits.RemovePrerequisite(session, row.Prerequisite.Subject)));
     }
 
     [RelayCommand]
     public void DeleteSelectedArrow()
     {
         if (SelectedArrow?.Link is not { } link) return;
-        Edit(() => Record(link.To, session => ResearchEdits.RemovePrerequisite(session, link.From.Name)));
+        Edit(() => Record(link.To.Entity, session => ResearchEdits.RemovePrerequisite(session, link.From.Name)));
         SelectedArrow = null;
     }
 
@@ -445,6 +526,7 @@ public sealed partial class ResearchViewModel : PageViewModel
     public void Undo()
     {
         if (!_undo.TryPop(out var session)) return;
+        StatusMessage = null;
         session.Undo();
         _redo.Push(session);
         NotifyUndo();
@@ -498,13 +580,14 @@ public sealed partial class ResearchViewModel : PageViewModel
         }
         _redo.Clear();
         Tree = Build();
+        Watch();
         Refresh();
         NotifyUndo();
     }
 
-    private void Record(ResearchSubject subject, Action<EntityEditSession> edit)
+    private void Record(EntityRecord entity, Action<EntityEditSession> edit)
     {
-        var session = _workspace.SessionFor(subject.Entity);
+        var session = _workspace.SessionFor(entity);
         int before = session.UndoCount;
         edit(session);
         if (session.UndoCount > before) _undo.Push(session);

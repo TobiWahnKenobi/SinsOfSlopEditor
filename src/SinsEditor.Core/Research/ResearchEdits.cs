@@ -92,6 +92,45 @@ public static class ResearchEdits
         return true;
     }
 
+    /// <summary>Adds a subject to the race's <c>researchInfo</c> list (no-op if it's there), keeping <c>count</c> right.</summary>
+    public static bool AddToResearchList(EntityEditSession raceSession, string subject)
+    {
+        var (doc, list) = ResearchListOf(raceSession);
+        if (FindListEntry(doc, list, subject) >= 0) return false;
+        var counter = doc.Lines[list.CounterLine];
+        var entry = list.Items.Count > 0
+            ? EntityEditSession.Clone(doc.Lines[list.Items[^1].Start])
+            : SinsLine.Create(counter.Indent, "entityDefName", "", doc.DefaultEnding);
+        entry.SetRawValue(SinsValue.FormatString(subject));
+        var newCounter = EntityEditSession.Clone(counter);
+        newCounter.SetRawValue(SinsValue.FormatInt(list.Items.Count + 1));
+        int insertAt = list.Items.Count > 0 ? list.Items[^1].End : list.CounterLine + 1;
+        raceSession.Apply($"Add {subject} to research", [new Splice(insertAt, 0, [entry]), new Splice(list.CounterLine, 1, [newCounter])]);
+        return true;
+    }
+
+    /// <summary>Removes a subject from the race's <c>researchInfo</c> list; the entity itself stays.</summary>
+    public static bool RemoveFromResearchList(EntityEditSession raceSession, string subject)
+    {
+        var (doc, list) = ResearchListOf(raceSession);
+        int index = FindListEntry(doc, list, subject);
+        if (index < 0) return false;
+        ListEdits.RemoveItem(raceSession, list, index);
+        return true;
+    }
+
+    private static (SinsDocument Doc, CountedList List) ResearchListOf(EntityEditSession raceSession)
+    {
+        var doc = raceSession.Document;
+        var node = doc.BuildTree().Child("entities")?.Child("researchInfo")?.Child("count")
+            ?? throw new InvalidOperationException($"{raceSession.EntityName} has no researchInfo list.");
+        return (doc, CountedList.Find(doc, node.LineIndex) ?? throw new InvalidOperationException($"{raceSession.EntityName}'s researchInfo has no count."));
+    }
+
+    private static int FindListEntry(SinsDocument doc, CountedList list, string subject) =>
+        list.Items.ToList().FindIndex(i => SinsValue.TryGetString(doc.Lines[i.Start].Value, out var s)
+            && string.Equals(s, subject, StringComparison.OrdinalIgnoreCase));
+
     private static int FindPrerequisite(SinsDocument doc, CountedList list, string subject)
     {
         for (int i = 0; i < list.Items.Count; i++)

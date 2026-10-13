@@ -44,9 +44,28 @@ public partial class ResearchView : UserControl
 
     private void Tray_PreviewMouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton != MouseButtonState.Pressed || Tray.SelectedItem is not SubjectChoice choice) return;
-        DragDrop.DoDragDrop(Tray, new DataObject(SubjectFormat, choice.Name), DragDropEffects.Move);
+        if (e.LeftButton != MouseButtonState.Pressed || Tray.SelectedItem is not UnassignedRow row) return;
+        DragDrop.DoDragDrop(Tray, new DataObject(SubjectFormat, row.Name), DragDropEffects.Move);
         DropMarker.Visibility = Visibility.Collapsed;
+    }
+
+    /// <summary>The list accepts icons dragged off the tree (not its own entries).</summary>
+    private void Tray_DragOver(object sender, DragEventArgs e)
+    {
+        bool fromTree = VM != null && e.Data.GetData(SubjectFormat) is string name && VM.IsOnTree(name);
+        e.Effects = fromTree ? DragDropEffects.Move : DragDropEffects.None;
+        TrayFrame.BorderBrush = fromTree ? (System.Windows.Media.Brush)FindResource("AccentFillColorDefaultBrush") : (System.Windows.Media.Brush)FindResource("DividerStrokeColorDefaultBrush");
+        e.Handled = true;
+    }
+
+    private void Tray_DragLeave(object sender, DragEventArgs e) =>
+        TrayFrame.BorderBrush = (System.Windows.Media.Brush)FindResource("DividerStrokeColorDefaultBrush");
+
+    private void Tray_Drop(object sender, DragEventArgs e)
+    {
+        Tray_DragLeave(sender, e);
+        if (VM != null && e.Data.GetData(SubjectFormat) is string name && VM.IsOnTree(name)) VM.RemoveFromTree(name);
+        e.Handled = true;
     }
 
     private void Board_DragOver(object sender, DragEventArgs e)

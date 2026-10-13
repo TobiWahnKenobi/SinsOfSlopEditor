@@ -142,6 +142,24 @@ public class ResearchEditTests
     }
 
     [Fact]
+    public void Research_list_add_and_remove_keep_the_count()
+    {
+        const string race =
+            "TXT\r\nentities\r\n\tresearchInfo\r\n\t\tcount 1\r\n\t\tentityDefName \"R1\"\r\n\tstarBaseInfo\r\n\t\tcount 0\r\n";
+        var file = new ResolvedFile("GameInfo/P.entity", new Layer("Mod", ".", LayerKind.EditedMod), "P.entity", []);
+        var s = new EntityEditSession(new EntityRecord("P", "Player", file, SinsDocument.Parse(Encoding.UTF8.GetBytes(race)), true));
+
+        Assert.True(ResearchEdits.AddToResearchList(s, "R2"));
+        Assert.False(ResearchEdits.AddToResearchList(s, "r2"));
+        Assert.Equal(["R1", "R2"], ResearchTree.ResearchList(s.Document));
+        Assert.Contains("\t\tcount 2\r\n\t\tentityDefName \"R1\"\r\n\t\tentityDefName \"R2\"\r\n\tstarBaseInfo", s.Text);
+
+        Assert.True(ResearchEdits.RemoveFromResearchList(s, "R1"));
+        Assert.False(ResearchEdits.RemoveFromResearchList(s, "R1"));
+        Assert.Contains("\t\tcount 1\r\n\t\tentityDefName \"R2\"\r\n", s.Text);
+    }
+
+    [Fact]
     public void Move_leaves_a_tier_that_differs_from_the_column()
     {
         var s = Session(Subject.Replace("Tier 4", "Tier 6"));

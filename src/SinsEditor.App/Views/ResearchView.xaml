@@ -259,12 +259,31 @@
                 <TextBlock Text="Click an icon to see and edit its prerequisites." Style="{StaticResource Muted}" Margin="0,0,0,16" TextWrapping="Wrap"
                            Visibility="{Binding HasSelection, Converter={StaticResource InverseBoolToVisibility}}" />
 
-                <TextBlock Text="Not on the research screen" FontWeight="SemiBold" Margin="0,0,0,2" />
-                <TextBlock Text="Drag onto a free cell to place." Style="{StaticResource Muted}" FontSize="12" Margin="0,0,0,4" />
-                <TextBlock Text="Every subject has a place." Style="{StaticResource Muted}" Margin="0,0,0,16"
-                           Visibility="{Binding Unplaced.Count, Converter={StaticResource ZeroToVisible}}" />
-                <ListBox x:Name="Tray" ItemsSource="{Binding Unplaced}" DisplayMemberPath="Display" MaxHeight="180" Margin="0,0,0,16"
-                         PreviewMouseMove="Tray_PreviewMouseMove" BorderThickness="0" />
+                <TextBlock Text="Not on the tree" FontWeight="SemiBold" Margin="0,0,0,2" />
+                <TextBlock Text="Drag onto a free cell to place. Drag an icon from the tree here to take it off this race's research list."
+                           Style="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,6" />
+                <TextBox Text="{Binding UnassignedFilter, UpdateSourceTrigger=PropertyChanged, Delay=200}" Margin="0,0,0,4"
+                         ToolTip="Filter by name" />
+                <CheckBox Content="Include subjects other races use" IsChecked="{Binding IncludeOtherRaces}" Margin="0,0,0,2" />
+                <CheckBox Content="Include base game subjects" IsChecked="{Binding IncludeBaseGame}" Margin="0,0,0,4"
+                          ToolTip="Subjects that only exist in the base game; mods often leave many of them unused" />
+                <TextBlock Text="{Binding UnassignedSummary}" Style="{StaticResource Muted}" FontSize="12" Margin="0,0,0,4" />
+                <Border x:Name="TrayFrame" BorderThickness="1" BorderBrush="{DynamicResource DividerStrokeColorDefaultBrush}" CornerRadius="4"
+                        Margin="0,0,0,16" AllowDrop="True" Background="Transparent"
+                        DragOver="Tray_DragOver" DragLeave="Tray_DragLeave" Drop="Tray_Drop">
+                    <ListBox x:Name="Tray" ItemsSource="{Binding Unassigned}" Height="220" BorderThickness="0" Background="Transparent"
+                             PreviewMouseMove="Tray_PreviewMouseMove" VirtualizingPanel.IsVirtualizing="True"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type rs:UnassignedRow}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Display}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Detail}" Style="{StaticResource Muted}" FontSize="11" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </Border>
 
                 <TextBlock Text="{Binding IssueSummary}" FontWeight="SemiBold" Margin="0,0,0,4" />
                 <ItemsControl ItemsSource="{Binding Issues}">

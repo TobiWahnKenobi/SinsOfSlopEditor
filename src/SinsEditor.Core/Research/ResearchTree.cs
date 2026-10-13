@@ -126,13 +126,21 @@ public sealed class ResearchTree
         tree.LoadWindowLayout(workspace);
         tree.LoadBlocks(currentDocument(race));
 
-        var names = index.ItemsOf(race).Where(i => i.Section == "researchInfo").Select(i => i.Name).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var names = ResearchList(currentDocument(race));
         tree.Subjects = names.Where(n => index.Entities.ContainsKey(n)).Select(n => ReadSubject(index.Entities[n], currentDocument(index.Entities[n]), index)).ToList();
         tree.MissingSubjects = names.Where(n => !index.Entities.ContainsKey(n)).ToList();
         tree.BuildLinks();
         tree.Validate(index);
         return tree;
     }
+
+    /// <summary>Subject names in a race's <c>entities/researchInfo</c> list, in file order without duplicates.</summary>
+    public static IReadOnlyList<string> ResearchList(SinsDocument raceDoc) =>
+        raceDoc.BuildTree().Child("entities")?.Child("researchInfo")?.ChildrenNamed("entityDefName")
+            .Select(n => SinsValue.TryGetString(n.Value, out var s) ? s : "")
+            .Where(s => s.Length > 0)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList() ?? [];
 
     public static ResearchSubject ReadSubject(EntityRecord entity, SinsDocument doc, ModIndex index)
     {

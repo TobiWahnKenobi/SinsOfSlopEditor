@@ -113,6 +113,85 @@ public sealed class ResearchEditorTests : IAsyncLifetime
     }
 
     [SkippableFact]
+    public void Unassigned_list_offers_other_subjects_with_filter()
+    {
+        var vm = Editor();
+        int ownOnly = vm.Unassigned.Count;
+
+        vm.IncludeOtherRaces = true;
+        vm.IncludeBaseGame = true;
+        Assert.True(vm.Unassigned.Count > ownOnly);
+        Assert.DoesNotContain(vm.Unassigned, r => vm.IsOnTree(r.Name) && !r.IsOnRaceList);
+
+        string name = vm.Unassigned.First(r => !r.IsOnRaceList).Name;
+        vm.UnassignedFilter = name;
+        Assert.Contains(vm.Unassigned, r => r.Name == name);
+        Assert.All(vm.Unassigned, r => Assert.True(r.Name.Contains(name, StringComparison.OrdinalIgnoreCase) || r.Display.Contains(name, StringComparison.CurrentCultureIgnoreCase)));
+    }
+
+    [SkippableFact]
+    public void Dropping_an_unassigned_subject_adds_and_places_it()
+    {
+        var vm = Editor();
+        vm.IncludeOtherRaces = true;
+        vm.IncludeBaseGame = true;
+        var row = vm.Unassigned.First(r => !r.IsOnRaceList);
+        int listBefore = ResearchTree.ResearchList(_workspace!.SessionFor(vm.Race).Document).Count;
+        var free = FreeCell(vm);
+
+        vm.MoveSubject(row.Name, free.Block, free.Column, free.Row);
+
+        Assert.True(vm.IsOnTree(row.Name));
+        var placed = vm.Tree.Subject(row.Name)!;
+        Assert.Equal((vm.SelectedField, free.Block.Index, free.Column, free.Row), (placed.Field, placed.Block!.Value, placed.Column!.Value, placed.Row!.Value));
+        Assert.Equal(listBefore + 1, ResearchTree.ResearchList(_workspace.SessionFor(vm.Race).Document).Count);
+        Assert.DoesNotContain(vm.Unassigned, r => r.Name == row.Name);
+
+        vm.Undo();
+        vm.Undo();
+        Assert.False(vm.IsOnTree(row.Name));
+        Assert.Equal(listBefore, ResearchTree.ResearchList(_workspace.SessionFor(vm.Race).Document).Count);
+        Assert.False(vm.IsDirty);
+    }
+
+    [SkippableFact]
+    public void Dropping_an_unassigned_subject_on_a_taken_cell_is_refused()
+    {
+        var vm = Editor();
+        vm.IncludeOtherRaces = true;
+        vm.IncludeBaseGame = true;
+        var row = vm.Unassigned.First(r => !r.IsOnRaceList);
+        var occupant = vm.Subjects[0].Subject;
+        var block = vm.Tree.BlocksOf(vm.SelectedField).Single(b => b.Index == occupant.Block);
+
+        vm.MoveSubject(row.Name, block, occupant.Column!.Value, occupant.Row!.Value);
+
+        Assert.False(vm.IsOnTree(row.Name));
+        Assert.False(vm.IsDirty);
+        Assert.Contains("taken", vm.StatusMessage);
+    }
+
+    [SkippableFact]
+    public void Dragging_off_the_tree_removes_it_from_the_race_list()
+    {
+        var vm = Editor();
+        var subject = vm.Subjects[0].Subject;
+
+        vm.RemoveFromTree(subject.Name);
+
+        Assert.False(vm.IsOnTree(subject.Name));
+        Assert.DoesNotContain(subject.Name, ResearchTree.ResearchList(_workspace!.SessionFor(vm.Race).Document));
+        Assert.True(_workspace.Index.Entities.ContainsKey(subject.Name));
+        vm.IncludeOtherRaces = true;
+        vm.IncludeBaseGame = true;
+        vm.UnassignedFilter = subject.Name;
+        Assert.Contains(vm.Unassigned, r => r.Name == subject.Name);
+
+        vm.Undo();
+        Assert.True(vm.IsOnTree(subject.Name));
+    }
+
+    [SkippableFact]
     public void Linking_and_deleting_an_arrow()
     {
         var vm = Editor();
