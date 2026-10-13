@@ -97,7 +97,16 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
 
-            <ItemsControl Grid.Column="0" ItemsSource="{Binding NavItems}" Margin="8,0,4,8">
+            <DockPanel Grid.Column="0">
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="16,8,8,12">
+                <Image Source="{DynamicResource Logo}" Height="40" Margin="0,0,10,0" RenderOptions.BitmapScalingMode="HighQuality" />
+                <StackPanel VerticalAlignment="Center" Width="150">
+                    <TextBlock Text="{DynamicResource AppTitle}" FontSize="12" FontWeight="SemiBold" />
+                    <TextBlock Text="{DynamicResource CopyrightText}" Style="{StaticResource Muted}" FontSize="11" TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding NavItems}" Margin="8,0,4,8">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:NavItem}">
                         <Button Command="{Binding DataContext.NavigateToCommand, RelativeSource={RelativeSource AncestorType=Window}}"
@@ -133,6 +142,8 @@
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+            </ScrollViewer>
+            </DockPanel>
 
             <DockPanel Grid.Column="1" Margin="4,0,12,12">
                 <!-- Tab strip -->
@@ -215,6 +226,9 @@
         <Border Grid.RowSpan="2" Background="{DynamicResource SolidBackgroundFillColorBaseBrush}"
                 Visibility="{Binding IsLoading, Converter={StaticResource BoolToVisibility}}">
             <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center" Width="420">
+                <Image Source="{DynamicResource Logo}" Height="180" Margin="0,0,0,16" RenderOptions.BitmapScalingMode="HighQuality" />
+                <TextBlock Text="{DynamicResource AppTitle}" FontSize="24" FontWeight="SemiBold" HorizontalAlignment="Center" Margin="0,0,0,4" />
+                <TextBlock Text="{DynamicResource CopyrightText}" Style="{StaticResource Muted}" HorizontalAlignment="Center" Margin="0,0,0,32" />
                 <TextBlock Text="{Binding LoadingText}" Margin="0,0,0,12" HorizontalAlignment="Center" />
                 <ProgressBar Value="{Binding LoadingProgress, Mode=OneWay}" Maximum="1" Height="4" />
                 <TextBlock Text="The first time a game version is opened, its files are converted. Later openings are faster."

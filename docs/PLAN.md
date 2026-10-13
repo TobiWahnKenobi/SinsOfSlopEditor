@@ -1,6 +1,7 @@
-# SinsEditor — build plan
+# Sins of Slop Editor — build plan
 
-Mod editor for Sins of a Solar Empire: Rebellion. WPF + HelixToolkit, .NET 9, Windows only.
+Mod editor for Sins of a Solar Empire: Rebellion (`SinsOfSlopEditor.exe`). WPF + HelixToolkit, .NET 9, Windows only.
+© Tobias Liebhart / lt-design.
 
 ## Ground rules
 

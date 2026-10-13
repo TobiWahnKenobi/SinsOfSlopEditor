@@ -93,7 +93,7 @@ public sealed partial class ShellViewModel : ObservableObject
     public ObservableCollection<NavItem> NavItems { get; } = [];
     public SearchViewModel Search { get; }
     public PageViewModel? CurrentPage => SelectedTab?.Page;
-    public string WindowTitle => Workspace is null ? "Sins Editor" : $"{Workspace.ModName} – Sins Editor";
+    public string WindowTitle => Workspace is null ? Branding.AppTitle : $"{Workspace.ModName} – {Branding.AppTitle}";
 
     public async Task OpenAsync(WorkspaceOptions options)
     {

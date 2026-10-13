@@ -16,6 +16,7 @@ namespace SinsEditor.App;
 /// <c>--target dashboard|category:&lt;id&gt;|entity:&lt;name&gt;|problems[:&lt;code&gt;]</c> picks the first page;
 /// <c>--search &lt;text&gt;</c> opens global search with a query;
 /// <c>--show-first-problem</c> clicks the first problem link of an entity page;
+/// <c>--loading-preview</c> shows the loading screen (for checking it in a screenshot);
 /// <c>--screenshot &lt;file.png&gt;</c> renders that page to a PNG and exits.
 /// </summary>
 public partial class App : Application
@@ -26,6 +27,7 @@ public partial class App : Application
     {
         base.OnStartup(e);
         ShutdownMode = ShutdownMode.OnExplicitShutdown;
+        Branding.Apply(this);
         _settings = EditorSettings.Load();
         var args = new CommandLine(e.Args);
 
@@ -60,6 +62,12 @@ public partial class App : Application
             await Task.Delay(800);
         }
 
+        if (args.LoadingPreview)
+        {
+            shell.LoadingText = "Reading entities (1,234 of 3,633)";
+            shell.LoadingProgress = 0.34;
+            shell.IsLoading = true;
+        }
         if (args.Screenshot is { } file)
         {
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
@@ -103,6 +111,7 @@ public partial class App : Application
         public CommandLine(string[] args)
         {
             ShowFirstProblem = args.Contains("--show-first-problem");
+            LoadingPreview = args.Contains("--loading-preview");
             for (int i = 0; i < args.Length - 1; i++)
             {
                 string value = args[i + 1];
@@ -127,6 +136,7 @@ public partial class App : Application
         public NavTarget? Target { get; }
         public string? Search { get; }
         public bool ShowFirstProblem { get; }
+        public bool LoadingPreview { get; }
 
         private static NavTarget ParseTarget(string value)
         {

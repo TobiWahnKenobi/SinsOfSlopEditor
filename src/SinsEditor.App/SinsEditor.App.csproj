@@ -10,8 +10,19 @@
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Logo for light backgrounds (black lines) and dark backgrounds (white lines). -->
+    <Resource Include="Assets\Logo.png" />
+    <Resource Include="Assets\Logo-White.png" />
+  </ItemGroup>
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
+    <AssemblyName>SinsOfSlopEditor</AssemblyName>
+    <RootNamespace>SinsEditor.App</RootNamespace>
+    <Product>Sins of Slop Editor</Product>
+    <Company>lt-design</Company>
+    <Copyright>© Tobias Liebhart / lt-design</Copyright>
     <TargetFramework>net9.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
