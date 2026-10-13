@@ -37,7 +37,7 @@ public sealed class CandidateProvider(ModWorkspace workspace)
             ReferenceKind.Entity => index.ActiveEntities
                 .Where(e => entityTypes.Count == 0 || entityTypes.Contains(e.EntityType))
                 .Select(e => new PickerItem(e.Name, index.DisplayName(e) ?? e.Name, e.EntityType)),
-            ReferenceKind.String => index.Strings.Entries.Values
+            ReferenceKind.String => index.Strings.Entries
                 .Select(s => new PickerItem(s.Id, s.Value.Length > 90 ? s.Value[..90] + "…" : s.Value, "")),
             ReferenceKind.Brush => index.Brushes.Entries.Values.Select(b => new PickerItem(b.Name, b.Name, Path.GetFileName(b.File.RelativePath))),
             ReferenceKind.Sound => index.Sounds.Entries.Values.Select(s => new PickerItem(s.Name, s.Name, "")),

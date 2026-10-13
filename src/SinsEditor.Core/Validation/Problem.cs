@@ -21,6 +21,7 @@ public static class ProblemCodes
     public const string EntityNotInManifest = "entity-not-in-manifest";
     public const string MissingReference = "missing-reference";
     public const string DuplicateString = "duplicate-string";
+    public const string ScatteredString = "scattered-string";
     public const string StringCountMismatch = "string-count-mismatch";
     public const string DuplicateBrush = "duplicate-brush";
     public const string MissingBrushFile = "missing-brush-file";
@@ -35,7 +36,8 @@ public static class ProblemCodes
         ManifestEntryWithoutFile => "Manifest entry without file",
         EntityNotInManifest => "Entity not in manifest",
         MissingReference => "Missing reference",
-        DuplicateString => "Duplicate string ID",
+        DuplicateString => "Duplicate string",
+        ScatteredString => "String defined in several places",
         StringCountMismatch => "String count mismatch",
         DuplicateBrush => "Duplicate brush",
         MissingBrushFile => "Missing brush file",

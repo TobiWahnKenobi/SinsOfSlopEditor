@@ -112,7 +112,7 @@ public sealed partial class SearchViewModel(ShellViewModel shell) : ObservableOb
         AddGroup(results, entities);
         ct.ThrowIfCancellationRequested();
 
-        var strings = index.Strings.Entries.Values
+        var strings = index.Strings.Entries
             .Where(s => s.Value.Contains(query, StringComparison.CurrentCultureIgnoreCase) || s.Id.Contains(query, StringComparison.OrdinalIgnoreCase))
             .Select(s => (String: s, User: index.IncomingReferences(ReferenceKind.String, s.Id).FirstOrDefault()))
             .Where(x => x.User != null)

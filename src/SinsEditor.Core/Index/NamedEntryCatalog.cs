@@ -8,7 +8,8 @@ public sealed record NamedEntry(string Name, ResolvedFile File, SinsNode Node);
 
 /// <summary>
 /// Entries found as <c>&lt;section&gt;</c> blocks with a <c>name "…"</c> child across several files,
-/// such as <c>brush</c> in <c>.brushes</c> and <c>effect</c> in <c>.sounddata</c>. First definition wins, like the game.
+/// such as <c>brush</c> in <c>.brushes</c> and <c>effect</c> in <c>.sounddata</c>. The editor keeps the first definition;
+/// which one the game uses for duplicates isn't verified.
 /// </summary>
 public sealed class NamedEntryCatalog
 {

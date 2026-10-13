@@ -199,15 +199,28 @@ public sealed class ModIndex
         if (Languages.ResolveStringFile(Stack, Language) is not { } file) return;
         var doc = SinsDocument.Load(await cache.GetTextPathAsync(file.AbsolutePath, ct));
         Strings = StringTable.Load(Language, file, doc);
+        // Consecutive repeats with different text are variants (the game's IDS_TAUNT_ lines) and fine.
         foreach (var dup in Strings.Duplicates)
         {
-            _problems.Add(new Problem(ProblemSeverity.Info, ProblemCodes.DuplicateString,
-                $"String ID '{dup.Id}' is defined more than once; the first definition is used.", file.RelativePath, dup.IdLineIndex));
+            if (dup.Kind == DuplicateKind.IdenticalCopies)
+            {
+                int copies = dup.Entries.Count - dup.Entries.Select(e => e.Value).Distinct(StringComparer.Ordinal).Count();
+                _problems.Add(new Problem(ProblemSeverity.Warning, ProblemCodes.DuplicateString,
+                    $"String '{dup.Id}' has {copies} identical {(copies == 1 ? "copy" : "copies")} that can be removed.",
+                    file.RelativePath, dup.Entries[1].IdLineIndex));
+            }
+            else if (dup.Kind == DuplicateKind.Scattered)
+            {
+                _problems.Add(new Problem(ProblemSeverity.Warning, ProblemCodes.ScatteredString,
+                    $"String '{dup.Id}' is defined {dup.Entries.Count} times in different places with different text " +
+                    $"(lines {string.Join(", ", dup.Entries.Select(e => e.IdLineIndex + 1))}). Variants belong together; otherwise this is likely a mistake.",
+                    file.RelativePath, dup.Entries[1].IdLineIndex));
+            }
         }
-        if (Strings.DeclaredCount is { } declared && declared != Strings.Entries.Count + Strings.Duplicates.Count)
+        if (Strings.DeclaredCount is { } declared && declared != Strings.TotalCount)
         {
             _problems.Add(new Problem(ProblemSeverity.Error, ProblemCodes.StringCountMismatch,
-                $"NumStrings says {declared}, but the file has {Strings.Entries.Count + Strings.Duplicates.Count} strings.", file.RelativePath));
+                $"NumStrings says {declared}, but the file has {Strings.TotalCount} strings.", file.RelativePath));
         }
     }
 
@@ -235,7 +248,7 @@ public sealed class ModIndex
         foreach (var dup in Brushes.Duplicates)
         {
             _problems.Add(new Problem(ProblemSeverity.Warning, ProblemCodes.DuplicateBrush,
-                $"Brush '{dup.Name}' is defined more than once; the first definition is used.", dup.File.RelativePath, dup.Node.LineIndex));
+                $"Brush '{dup.Name}' is defined more than once (also in {Brushes.Entries[dup.Name].File.RelativePath}); only one of them takes effect.", dup.File.RelativePath, dup.Node.LineIndex));
         }
     }
 

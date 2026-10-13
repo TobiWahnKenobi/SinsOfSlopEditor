@@ -56,7 +56,7 @@ public sealed partial class DashboardViewModel : PageViewModel
             .GroupBy(p => p.Code)
             .Select(g => new ProblemGroup(g.Key, ProblemCodes.Title(g.Key), g.Max(p => p.Severity),
                 g.Key == ProblemCodes.ConventionMismatch ? workspace.ConventionMismatches.Count : g.Count(),
-                g.First().Message, new ProblemsTarget(g.Key), g.Key == ProblemCodes.ConventionMismatch))
+                g.First().Message, new ProblemsTarget(g.Key), g.Key is ProblemCodes.ConventionMismatch or ProblemCodes.DuplicateString))
             .OrderByDescending(g => g.Severity)
             .ThenByDescending(g => g.Count)
             .ToList();
@@ -86,6 +86,34 @@ public sealed partial class DashboardViewModel : PageViewModel
     private void Open(NavTarget target) => _navigate(target);
 
     [RelayCommand]
+    private async Task FixAllAsync(ProblemGroup? group)
+    {
+        switch (group?.Code)
+        {
+            case ProblemCodes.ConventionMismatch:
+                await FixConventionsAsync();
+                break;
+            case ProblemCodes.DuplicateString:
+                await FixDuplicateStringsAsync();
+                break;
+        }
+    }
+
+    private async Task FixDuplicateStringsAsync()
+    {
+        int copies = StringFixes.CountIdenticalCopies(_workspace.Index.Strings);
+        var answer = MessageBox.Show(
+            $"Remove {copies} string entries that repeat an ID with the same text?\n\n" +
+            "The first entry of each is kept, and NumStrings is updated. Entries that share an ID but have different text " +
+            "(like the game's taunt variants) are kept.",
+            "Remove duplicate strings", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.OK) return;
+
+        int removed = await Task.Run(() => StringFixes.RemoveIdenticalCopies(_workspace));
+        MessageBox.Show($"Removed {removed} entries.", "Remove duplicate strings");
+        await _reload();
+    }
+
     private async Task FixConventionsAsync()
     {
         var mismatches = _workspace.ConventionMismatches;

@@ -30,7 +30,7 @@ public sealed class EntitySaver(ModWorkspace workspace)
         var doc = SinsDocument.Parse(session.Document.ToBytes());
         doc.ApplyConvention(ConventionCheck.ExpectedConvention(workspace.Stack, relative, doc.HasNonAsciiText));
 
-        string temp = target + ".sinseditor-tmp";
+        string temp = target + SafeWrite.TempSuffix;
         try
         {
             if (format == SaveFormat.Binary)

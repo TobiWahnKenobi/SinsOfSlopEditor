@@ -151,7 +151,8 @@
                                             </TextBlock.Style>
                                         </TextBlock>
                                         <Button DockPanel.Dock="Right" Content="Fix all" Margin="8,0,0,0" VerticalAlignment="Top"
-                                                Command="{Binding DataContext.FixConventionsCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                Command="{Binding DataContext.FixAllCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                CommandParameter="{Binding}"
                                                 Visibility="{Binding CanFixAll, Converter={StaticResource BoolToVisibility}}" />
                                         <StackPanel>
                                             <TextBlock>

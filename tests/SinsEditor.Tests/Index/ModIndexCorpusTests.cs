@@ -40,7 +40,7 @@ public class ModIndexCorpusTests(TestModIndexFixture fixture, ITestOutputHelper 
     public void Reports_overview()
     {
         var index = Index;
-        output.WriteLine($"entities {index.Entities.Count}, manifest {index.ManifestEntries.Count}, strings {index.Strings.Entries.Count}, " +
+        output.WriteLine($"entities {index.Entities.Count}, manifest {index.ManifestEntries.Count}, strings {index.Strings.TotalCount}, " +
                          $"brushes {index.Brushes.Entries.Count}, sounds {index.Sounds.Entries.Count}, meshes {index.Meshes.Count}, " +
                          $"particles {index.Particles.Count}, textures {index.Textures.Count}, references {index.References.Count}");
         foreach (var g in index.Entities.Values.GroupBy(e => e.File.Layer.Name)) output.WriteLine($"  layer {g.Key}: {g.Count()}");

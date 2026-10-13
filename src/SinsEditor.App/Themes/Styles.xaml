@@ -8,6 +8,12 @@
     <conv:ZeroToVisibleConverter x:Key="ZeroToVisible" />
     <conv:DepthToMarginConverter x:Key="DepthToMargin" />
 
+    <!-- Tooltips inherit the font of their owner; icon buttons use the icon font, which has no letters. -->
+    <Style TargetType="ToolTip" BasedOn="{StaticResource {x:Type ToolTip}}">
+        <Setter Property="FontFamily" Value="{x:Static SystemFonts.MessageFontFamily}" />
+        <Setter Property="FontSize" Value="12" />
+    </Style>
+
     <!-- Section heading inside a page. -->
     <Style x:Key="SectionHeader" TargetType="TextBlock">
         <Setter Property="FontSize" Value="16" />
