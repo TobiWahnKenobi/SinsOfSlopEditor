@@ -11,6 +11,11 @@ Mod editor for Sins of a Solar Empire: Rebellion. WPF + HelixToolkit, .NET 9, Wi
   - `%LocalAppData%\SinsEditor\cache\<game-version>\` — text conversions of the binary base-game files
     (pure cache, safe to delete, shared by all mods).
 - **Lossless round trip.** Opening and saving a file without edits produces identical bytes.
+- **Files the editor writes follow the base game's text conventions** (`TextConventions`): CRLF line endings, and the
+  encoding of the same file in the base game (binary game files → UTF-8 with BOM, like ConvertData's output).
+  New files: UTF-8 with BOM for `.entity`/`.mesh`/`.particle`/`.brushes`, plain UTF-8 otherwise.
+  Non-ASCII content always gets a BOM. Non-UTF-8 input is read as Windows-1252 and converted.
+  Files the editor doesn't write stay untouched; validation lists deviating files, with a "convert all" fix.
 - **Binary files are converted with the game's `ConvertData_Rebellion.exe`**, never with a custom parser.
 - **Exactly one mod is editable.** Everything below it is read-only.
 

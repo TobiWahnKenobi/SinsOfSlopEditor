@@ -7,8 +7,8 @@ public enum SinsTextEncoding
 {
     Utf8,
     Utf8WithBom,
-    /// <summary>Fallback for files that are not valid UTF-8; maps every byte to one char and back.</summary>
-    Latin1,
+    /// <summary>Fallback for files that are not valid UTF-8, read as Windows-1252 (every byte round-trips).</summary>
+    Ansi,
 }
 
 /// <summary>
@@ -18,6 +18,13 @@ public enum SinsTextEncoding
 public sealed class SinsDocument
 {
     private static readonly UTF8Encoding StrictUtf8 = new(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: true);
+    private static readonly Encoding Windows1252 = CreateWindows1252();
+
+    private static Encoding CreateWindows1252()
+    {
+        System.Text.Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        return System.Text.Encoding.GetEncoding(1252);
+    }
 
     private SinsDocument(List<SinsLine> lines, SinsTextEncoding encoding, string defaultEnding)
     {
@@ -29,10 +36,12 @@ public sealed class SinsDocument
     /// <summary>All lines, including the <c>TXT</c> header as line 0.</summary>
     public List<SinsLine> Lines { get; }
 
-    public SinsTextEncoding Encoding { get; }
+    public SinsTextEncoding Encoding { get; private set; }
 
     /// <summary>Line ending used for newly inserted lines (the most common one in the file).</summary>
-    public string DefaultEnding { get; }
+    public string DefaultEnding { get; private set; }
+
+    public bool HasNonAsciiText => Lines.Any(l => l.Text.Any(c => c > 127));
 
     /// <summary>The format marker on the first line, e.g. <c>TXT</c> or <c>TXT2</c>.</summary>
     public string Header => Lines.Count > 0 ? Lines[0].Key : "";
@@ -57,8 +66,8 @@ public sealed class SinsDocument
             }
             catch (DecoderFallbackException)
             {
-                text = System.Text.Encoding.Latin1.GetString(bytes);
-                encoding = SinsTextEncoding.Latin1;
+                text = Windows1252.GetString(bytes);
+                encoding = SinsTextEncoding.Ansi;
             }
         }
 
@@ -95,12 +104,32 @@ public sealed class SinsDocument
         return Encoding switch
         {
             SinsTextEncoding.Utf8WithBom => [0xEF, 0xBB, 0xBF, .. StrictUtf8.GetBytes(text)],
-            SinsTextEncoding.Latin1 => System.Text.Encoding.Latin1.GetBytes(text),
+            SinsTextEncoding.Ansi => Windows1252.GetBytes(text),
             _ => StrictUtf8.GetBytes(text),
         };
     }
 
     public void Save(string path) => File.WriteAllBytes(path, ToBytes());
+
+    /// <summary>
+    /// Converts encoding and line endings to <paramref name="convention"/>. Whether the file ends with a newline is kept.
+    /// Returns true if anything changed.
+    /// </summary>
+    public bool ApplyConvention(TextConvention convention)
+    {
+        bool changed = Encoding != convention.Encoding;
+        Encoding = convention.Encoding;
+        DefaultEnding = convention.LineEnding;
+        foreach (var line in Lines)
+        {
+            if (line.Ending.Length > 0 && line.Ending != convention.LineEnding)
+            {
+                line.Ending = convention.LineEnding;
+                changed = true;
+            }
+        }
+        return changed;
+    }
 
     /// <summary>
     /// Inserts a line with the document's default ending. Appending after a last line that has no
