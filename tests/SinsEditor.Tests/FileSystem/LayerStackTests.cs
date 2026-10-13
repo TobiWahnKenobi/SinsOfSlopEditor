@@ -113,6 +113,20 @@ public sealed class LayerStackTests : IDisposable
         Assert.Equal(["English", "French"], Languages.Available(Stack()));
     }
 
+    [Fact]
+    public void Mods_without_a_manifest_are_listed()
+    {
+        Write("mods/Full/Entity.manifest");
+        Write("mods/AiOnly/GameInfo/AI.entity");
+        Write("mods/AiOnly/String/English.str");
+        Write("mods/Archive/readme.txt");
+        Write("mods/SomeMod.7z");
+
+        var mods = GameLocator.ListMods(Path.Combine(_root, "mods")).Select(Path.GetFileName);
+
+        Assert.Equal(["AiOnly", "Full"], mods);
+    }
+
     [Theory]
     [InlineData("Mine", new[] { "Base" })]
     [InlineData("NotListed", new[] { "Base", "Mine", "Other" })]

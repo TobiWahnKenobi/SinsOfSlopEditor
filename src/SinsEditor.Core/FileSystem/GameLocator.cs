@@ -39,14 +39,24 @@ public static partial class GameLocator
         return Directory.EnumerateDirectories(root, "Mods-*").OrderByDescending(d => d, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
-    /// <summary>Mod folders in a mods folder (any subfolder with an entity manifest).</summary>
+    private static readonly string[] ModDataFolders =
+        ["GameInfo", "Window", "Textures", "Mesh", "Particle", "String", "Sound", "PipelineEffect", "Galaxy", "Font", "TextureAnimations"];
+
+    /// <summary>
+    /// Mod folders in a mods folder. A mod only needs the files it overrides (e.g. an AI mod with just GameInfo and
+    /// String), so any subfolder with a manifest or one of the game's data folders counts.
+    /// </summary>
     public static IReadOnlyList<string> ListMods(string modsFolder) =>
         Directory.Exists(modsFolder)
             ? Directory.EnumerateDirectories(modsFolder)
-                .Where(d => File.Exists(Path.Combine(d, "Entity.manifest")))
+                .Where(IsModFolder)
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .ToList()
             : [];
+
+    public static bool IsModFolder(string path) =>
+        Directory.EnumerateFiles(path, "*.manifest").Any()
+        || ModDataFolders.Any(f => Directory.Exists(Path.Combine(path, f)));
 
     [GeneratedRegex("\"path\"\\s+\"([^\"]+)\"")]
     private static partial Regex LibraryPathRegex();
