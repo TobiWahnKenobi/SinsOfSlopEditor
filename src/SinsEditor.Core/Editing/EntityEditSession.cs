@@ -47,6 +47,8 @@ public sealed class EntityEditSession
     /// <summary>Format chosen for the next save; null means the workspace default for this entity.</summary>
     public SaveFormat? Format { get; set; }
     public bool CanUndo => _undo.Count > 0;
+    /// <summary>Number of steps that can be undone; lets callers see whether an operation added one.</summary>
+    public int UndoCount => _undo.Count;
     public bool CanRedo => _redo.Count > 0;
     public string? UndoDescription => _undo.TryPeek(out var e) ? e.Description : null;
     public string? RedoDescription => _redo.TryPeek(out var e) ? e.Description : null;

@@ -71,6 +71,19 @@ public sealed class TextureStore(ModIndex index)
         return new BrushRenderResult(texture.Crop(image.Box), null);
     }
 
+    /// <summary>
+    /// Renders a brush at a given size. Margins brushes are drawn as nine-slice (corners fixed, edges and centre
+    /// stretched); other brushes are scaled. Returns null if the brush can't be rendered.
+    /// </summary>
+    public PixelImage? RenderBrushSized(string brushName, int width, int height)
+    {
+        if (width <= 0 || height <= 0 || !index.Brushes.Entries.TryGetValue(brushName, out var entry)) return null;
+        var brush = Brush.FromEntry(entry);
+        var source = RenderBrush(brushName).Image;
+        if (source is null || source.Width == 0) return null;
+        return brush.StretchMargins.IsEmpty ? ImageOps.Scale(source, width, height) : ImageOps.NineSlice(source, brush.StretchMargins, width, height);
+    }
+
     /// <summary>The game's own data overhangs texture edges by one pixel (e.g. 412 + 101 on a 512 texture) without visible effect.</summary>
     private const int OverhangTolerance = 1;
 

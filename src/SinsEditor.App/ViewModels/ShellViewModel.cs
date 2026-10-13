@@ -219,7 +219,7 @@ public sealed partial class ShellViewModel : ObservableObject
         foreach (var tab in Tabs)
         {
             tab.Navigation.InvalidateOtherPages();
-            if (tab.Page is not (EntityViewModel or RaceViewModel)) tab.Navigation.RecreateCurrentPage();
+            if (tab.Page is not (EntityViewModel or RaceViewModel or Research.ResearchViewModel)) tab.Navigation.RecreateCurrentPage();
         }
         UpdateNavSelection();
     }
@@ -327,7 +327,7 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             item.IsSelected = item.Target == target
                 || (page is EntityViewModel ev && item.Target == new CategoryTarget(ev.Category.Id))
-                || (page is RaceViewModel && item.Target == new CategoryTarget(EntityCategories.Races.Id))
+                || (page is RaceViewModel or Research.ResearchViewModel && item.Target == new CategoryTarget(EntityCategories.Races.Id))
                 || (target is ProblemsTarget && item.IsProblems);
         }
     }
@@ -343,6 +343,7 @@ public sealed partial class ShellViewModel : ObservableObject
             EntityTarget e when ws.Index.Entities.TryGetValue(e.EntityName, out var entity) =>
                 entity.EntityType == "Player" ? new RaceViewModel(ws, entity, navigate) : new EntityViewModel(ws, entity, navigate),
             ProblemsTarget p => new ProblemsViewModel(ws, p.Code, navigate),
+            ResearchTarget r when ws.Index.Entities.TryGetValue(r.RaceName, out var race) => new Research.ResearchViewModel(ws, race, navigate),
             _ => new DashboardViewModel(ws, navigate, ReloadAsync),
         };
     }

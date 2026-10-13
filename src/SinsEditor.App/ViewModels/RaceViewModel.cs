@@ -134,6 +134,9 @@ public sealed partial class RaceViewModel : PageViewModel
     public override void Detach() => Detail?.Detach();
 
     [RelayCommand]
+    private void OpenResearchTree() => _navigate(new ResearchTarget(Race.Name));
+
+    [RelayCommand]
     private void Open(RaceTreeNode? node)
     {
         if (node?.Entity is { } entity) _navigate(new EntityTarget(entity.Name));

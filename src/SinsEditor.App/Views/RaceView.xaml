@@ -10,6 +10,8 @@
         </Grid.ColumnDefinitions>
 
         <DockPanel Grid.Column="0" Margin="12,16,4,12">
+            <Button DockPanel.Dock="Top" Content="Open research tree" Command="{Binding OpenResearchTreeCommand}" HorizontalAlignment="Stretch"
+                    Margin="0,0,0,8" ToolTip="Graphical research tree editor for this race (Ctrl+click: new tab)" />
             <TextBox DockPanel.Dock="Top" Text="{Binding FilterText, UpdateSourceTrigger=PropertyChanged, Delay=200}"
                      Margin="0,0,0,8" ToolTip="Filter the race's items by name" />
             <TreeView x:Name="Tree" ItemsSource="{Binding Roots}" BorderThickness="0" Background="Transparent"

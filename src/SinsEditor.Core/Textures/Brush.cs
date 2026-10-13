@@ -6,6 +6,12 @@ namespace SinsEditor.Core.Textures;
 /// <summary>One image region of a brush: a texture name and a rectangle in it.</summary>
 public sealed record BrushImage(string FileName, PixelBox Box, int LineIndex);
 
+/// <summary>Nine-slice margins: corners keep their size, edges and centre stretch.</summary>
+public readonly record struct Margins(int Left, int Top, int Right, int Bottom)
+{
+    public bool IsEmpty => Left == 0 && Top == 0 && Right == 0 && Bottom == 0;
+}
+
 /// <summary>
 /// A named image region from a <c>.brushes</c> file. Content types:
 /// <c>Simple</c> and <c>Margins</c> have one image; <c>States</c> and <c>MarginsAndStates</c> have one per state
@@ -16,12 +22,16 @@ public sealed class Brush
     public const string SimpleState = "";
     public const string NormalState = "Normal";
 
-    private Brush(NamedEntry entry, string content, IReadOnlyDictionary<string, BrushImage> images)
+    private Brush(NamedEntry entry, string content, IReadOnlyDictionary<string, BrushImage> images, Margins stretch)
     {
         Entry = entry;
         Content = content;
         Images = images;
+        StretchMargins = stretch;
     }
+
+    /// <summary>For Margins brushes: how the image stretches. Empty for Simple and States brushes.</summary>
+    public Margins StretchMargins { get; }
 
     public NamedEntry Entry { get; }
     public string Name => Entry.Name;
@@ -43,8 +53,14 @@ public sealed class Brush
         {
             if (child.Children.Count > 0 && Read(child) is { } image) images[child.Key] = image;
         }
-        return new Brush(entry, content, images);
+        var stretch = node.Child("stretchMargins") is { } m
+            ? new Margins(Int(m, "left"), Int(m, "top"), Int(m, "right"), Int(m, "bottom"))
+            : default;
+        return new Brush(entry, content, images, stretch);
     }
+
+    private static int Int(SinsNode node, string key) =>
+        node.Child(key) is { } c && SinsValue.TryGetInt(c.Value, out int v) ? v : 0;
 
     private static BrushImage? Read(SinsNode node)
     {

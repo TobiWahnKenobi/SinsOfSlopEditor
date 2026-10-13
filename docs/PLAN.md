@@ -129,7 +129,10 @@ The schema says what each field means, which is what turns raw text into forms, 
     - Subject cell position = block.area + buttonTopLeftOffset + pos × (buttonSize + buttonSpacing).
     - Subject icons = the subject's `hudIcon` brush → `fileName` + `pixelBox` in a `.dds`/`.tga` texture.
   - The game only draws the arrow shapes listed in `arrowBrushes` (Right1–4, Down1, Up1Right1, BlockDown1, …, OtherTab).
-    The editor draws arrows the same way and flags prerequisites whose relative position has no matching arrow shape.
+    The editor flags prerequisites whose relative position has no matching arrow shape. It draws arrows as its own lines
+    routed like the game's images (horizontal, vertical, one bend), because where the game anchors each arrow image
+    isn't in the data. Arrow image sizes confirm the grid: column stride 64 (Right1 = 63 px, Right2 = 127 px), row stride 46.
+  - In the base game's races most prerequisites run 1–2 columns to the right; the test mod's Centauri tree runs mostly downward.
   - Toggleable editor overlay on top of the faithful view: grid, internal names, problem markers.
   - Tabs per `ResearchField` (Combat, Defense, NonCombat, Diplomacy, Fleet, Artifact) and the stacked blocks within each field, as in game.
   - Grid of `pos [column, row]` (columns 0–7, rows 0–4 in the test mod). Subjects are drawn as their icons; drag to move.

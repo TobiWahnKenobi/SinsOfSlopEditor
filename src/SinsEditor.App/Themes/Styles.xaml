@@ -7,6 +7,7 @@
     <conv:NotNullConverter x:Key="NotNull" />
     <conv:ZeroToVisibleConverter x:Key="ZeroToVisible" />
     <conv:DepthToMarginConverter x:Key="DepthToMargin" />
+    <conv:InverseBoolToVisibilityConverter x:Key="InverseBoolToVisibility" />
 
     <!-- Tooltips inherit the font of their owner; icon buttons use the icon font, which has no letters. -->
     <Style TargetType="ToolTip" BasedOn="{StaticResource {x:Type ToolTip}}">

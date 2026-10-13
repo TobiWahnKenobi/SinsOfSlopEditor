@@ -4,6 +4,7 @@
         xmlns:vm="clr-namespace:SinsEditor.App.ViewModels"
         xmlns:views="clr-namespace:SinsEditor.App.Views"
         xmlns:nav="clr-namespace:SinsEditor.App.Navigation"
+        xmlns:research="clr-namespace:SinsEditor.App.Research"
         Title="{Binding WindowTitle}"
         Width="1400" Height="900" MinWidth="900" MinHeight="600"
         WindowStartupLocation="CenterScreen">
@@ -13,6 +14,7 @@
         <DataTemplate DataType="{x:Type vm:EntityViewModel}"><views:EntityView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:RaceViewModel}"><views:RaceView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:ProblemsViewModel}"><views:ProblemsView /></DataTemplate>
+        <DataTemplate DataType="{x:Type research:ResearchViewModel}"><views:ResearchView /></DataTemplate>
     </Window.Resources>
     <Window.InputBindings>
         <KeyBinding Modifiers="Alt" Key="Left" Command="{Binding GoBackCommand}" />

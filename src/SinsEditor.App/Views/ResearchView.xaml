@@ -1,0 +1,244 @@
+<UserControl x:Class="SinsEditor.App.Views.ResearchView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:rs="clr-namespace:SinsEditor.App.Research"
+             Focusable="True" KeyDown="OnKeyDown">
+    <UserControl.Resources>
+        <!-- Items positioned on the canvas by their bounds (research window pixel coordinates). -->
+        <Style x:Key="AtBounds" TargetType="ContentPresenter">
+            <Setter Property="Canvas.Left" Value="{Binding Bounds.X}" />
+            <Setter Property="Canvas.Top" Value="{Binding Bounds.Y}" />
+        </Style>
+        <ItemsPanelTemplate x:Key="CanvasPanel"><Canvas /></ItemsPanelTemplate>
+    </UserControl.Resources>
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*" />
+            <ColumnDefinition Width="Auto" />
+            <ColumnDefinition Width="340" MinWidth="260" />
+        </Grid.ColumnDefinitions>
+
+        <!-- Field tabs, toolbar and the research window -->
+        <DockPanel Grid.Column="0" Margin="16,16,8,12">
+            <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <CheckBox Content="Grid" IsChecked="{Binding ShowGrid}" Margin="0,0,12,0" ToolTip="Show the cells of every block" />
+                    <CheckBox Content="Names" IsChecked="{Binding ShowNames}" Margin="0,0,12,0" ToolTip="Show names under the icons" />
+                    <Button Content="&#xE7A7;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Padding="8,5" MinWidth="0" Margin="0,0,4,0"
+                            Command="{Binding UndoCommand}" ToolTip="Undo the last change made here (Ctrl+Z)" />
+                    <Button Content="&#xE7A6;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Padding="8,5" MinWidth="0"
+                            Command="{Binding RedoCommand}" ToolTip="Redo (Ctrl+Y)" />
+                </StackPanel>
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}" />
+                        <TextBlock Text="  ●" FontSize="18" VerticalAlignment="Center" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                   ToolTip="Unsaved changes (Save all: Ctrl+Shift+S)" Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibility}}" />
+                    </StackPanel>
+                    <TextBlock Text="Drag to move · Shift+drag onto another icon to link · select an arrow, Delete to unlink"
+                               Style="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" />
+                </StackPanel>
+            </DockPanel>
+
+            <ItemsControl DockPanel.Dock="Top" ItemsSource="{Binding FieldTabs}" Margin="0,0,0,8">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type rs:FieldTab}">
+                        <Button Command="{Binding DataContext.SelectFieldCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                CommandParameter="{Binding Field}" Margin="0,0,6,4" Padding="8,4">
+                            <StackPanel Orientation="Horizontal">
+                                <Image Source="{Binding Icon}" Width="28" Height="20" Stretch="Uniform" Margin="0,0,6,0"
+                                       Visibility="{Binding Icon, Converter={StaticResource NullToCollapsed}}" />
+                                <TextBlock Text="{Binding Title}" VerticalAlignment="Center" />
+                                <TextBlock Text="{Binding Count, StringFormat='  {0}'}" Style="{StaticResource Muted}" VerticalAlignment="Center" />
+                                <TextBlock Text=" &#xE7BA;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Foreground="{StaticResource WarningBrush}"
+                                           VerticalAlignment="Center" Visibility="{Binding HasIssues, Converter={StaticResource BoolToVisibility}}" />
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock DockPanel.Dock="Top" Text="{Binding StatusMessage}" Style="{StaticResource Muted}" Margin="0,0,0,6"
+                       Visibility="{Binding StatusMessage, Converter={StaticResource NullToCollapsed}}" />
+
+            <Viewbox Stretch="Uniform" VerticalAlignment="Top">
+                <Grid x:Name="Board" Width="814" Height="749" Background="#FF101418" AllowDrop="True"
+                      DragOver="Board_DragOver" Drop="Board_Drop" DragLeave="Board_DragLeave" MouseLeftButtonDown="Board_MouseDown">
+                    <Image Source="{Binding ContentBackdrop}" Stretch="Fill" />
+
+                    <!-- Blocks: stretched backdrop, title, picture -->
+                    <ItemsControl ItemsSource="{Binding Blocks}" ItemsPanel="{StaticResource CanvasPanel}" ItemContainerStyle="{StaticResource AtBounds}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type rs:BlockVisual}">
+                                <Grid Width="{Binding Bounds.Width}" Height="{Binding Bounds.Height}">
+                                    <Image Source="{Binding Backdrop}" Stretch="Fill" />
+                                    <TextBlock Text="{Binding Title}" Foreground="White" FontSize="15" Margin="18,18,0,0" FontFamily="Segoe UI Semibold" />
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <ItemsControl ItemsSource="{Binding Blocks}" ItemsPanel="{StaticResource CanvasPanel}">
+                        <ItemsControl.ItemContainerStyle>
+                            <Style TargetType="ContentPresenter">
+                                <Setter Property="Canvas.Left" Value="{Binding PicturePosition.X}" />
+                                <Setter Property="Canvas.Top" Value="{Binding PicturePosition.Y}" />
+                            </Style>
+                        </ItemsControl.ItemContainerStyle>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type rs:BlockVisual}">
+                                <Image Source="{Binding Picture}" Stretch="None" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Editor overlay: empty cells -->
+                    <ItemsControl ItemsSource="{Binding Cells}" ItemsPanel="{StaticResource CanvasPanel}" ItemContainerStyle="{StaticResource AtBounds}"
+                                  IsHitTestVisible="False">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type rs:CellVisual}">
+                                <Rectangle Width="{Binding Bounds.Width}" Height="{Binding Bounds.Height}" Stroke="#55FFFFFF"
+                                           StrokeDashArray="3 3" StrokeThickness="1" RadiusX="3" RadiusY="3" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Arrows, under the icons like in the game -->
+                    <ItemsControl ItemsSource="{Binding Arrows}" ItemsPanel="{StaticResource CanvasPanel}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type rs:ArrowVisual}">
+                                <Canvas>
+                                    <Polyline x:Name="Hit" Points="{Binding Line}" Stroke="Transparent" StrokeThickness="10" Cursor="Hand"
+                                              ToolTip="{Binding ToolTip}" MouseLeftButtonDown="Arrow_MouseDown" />
+                                    <Polyline x:Name="Line" Points="{Binding Line}" Stroke="#FFD8D8D8" StrokeThickness="2.5" IsHitTestVisible="False" />
+                                    <Polygon x:Name="Head" Points="{Binding Head}" Fill="#FFD8D8D8" IsHitTestVisible="False" />
+                                </Canvas>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding IsUnsupported}" Value="True">
+                                        <Setter TargetName="Line" Property="Stroke" Value="{StaticResource ErrorBrush}" />
+                                        <Setter TargetName="Line" Property="StrokeDashArray" Value="3 2" />
+                                        <Setter TargetName="Head" Property="Fill" Value="{StaticResource ErrorBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                        <Setter TargetName="Line" Property="Stroke" Value="#FF4FC3F7" />
+                                        <Setter TargetName="Line" Property="StrokeThickness" Value="4" />
+                                        <Setter TargetName="Head" Property="Fill" Value="#FF4FC3F7" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Research buttons -->
+                    <ItemsControl ItemsSource="{Binding Subjects}" ItemsPanel="{StaticResource CanvasPanel}" ItemContainerStyle="{StaticResource AtBounds}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type rs:SubjectVisual}">
+                                <Grid Width="{Binding Bounds.Width}" Height="{Binding Bounds.Height}" Background="Transparent" Cursor="Hand"
+                                      ToolTip="{Binding ToolTip}" MouseLeftButtonDown="Subject_MouseDown" MouseMove="Subject_MouseMove">
+                                    <Image Source="{Binding Backdrop}" Stretch="Fill" />
+                                    <Image Source="{Binding Icon}" Stretch="Fill" Margin="2" />
+                                    <Border x:Name="Mark" BorderThickness="0" CornerRadius="2" />
+                                    <TextBlock Text="{Binding DisplayName}" Foreground="White" FontSize="8" TextAlignment="Center" TextWrapping="Wrap"
+                                               VerticalAlignment="Top" Margin="-6,38,-6,0" IsHitTestVisible="False"
+                                               Visibility="{Binding DataContext.ShowNames, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}">
+                                        <TextBlock.Effect>
+                                            <DropShadowEffect ShadowDepth="0" BlurRadius="3" Opacity="1" />
+                                        </TextBlock.Effect>
+                                    </TextBlock>
+                                </Grid>
+                                <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding HasIssue}" Value="True">
+                                        <Setter TargetName="Mark" Property="BorderBrush" Value="{StaticResource WarningBrush}" />
+                                        <Setter TargetName="Mark" Property="BorderThickness" Value="2" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IssueIsError}" Value="True">
+                                        <Setter TargetName="Mark" Property="BorderBrush" Value="{StaticResource ErrorBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                        <Setter TargetName="Mark" Property="BorderBrush" Value="#FF4FC3F7" />
+                                        <Setter TargetName="Mark" Property="BorderThickness" Value="3" />
+                                    </DataTrigger>
+                                </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Drop target while dragging -->
+                    <Canvas IsHitTestVisible="False">
+                        <Rectangle x:Name="DropMarker" Stroke="#FF4FC3F7" StrokeThickness="2" RadiusX="3" RadiusY="3" Visibility="Collapsed" />
+                    </Canvas>
+                </Grid>
+            </Viewbox>
+        </DockPanel>
+
+        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
+
+        <!-- Inspector -->
+        <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="12,16,16,12">
+                <StackPanel Visibility="{Binding HasSelection, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="{Binding SelectedTitle}" Style="{StaticResource SectionHeader}" FontSize="18" Margin="0,0,0,2" />
+                    <TextBlock Text="{Binding SelectedDetails}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <TextBlock Margin="0,0,0,12">
+                        <Hyperlink Command="{Binding OpenSelectedCommand}">Open entity (Ctrl+click: new tab)</Hyperlink>
+                    </TextBlock>
+
+                    <TextBlock Text="Prerequisites" FontWeight="SemiBold" Margin="0,0,0,4" />
+                    <ItemsControl ItemsSource="{Binding SelectedPrerequisites}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type rs:PrerequisiteRow}">
+                                <DockPanel Margin="0,1">
+                                    <Button DockPanel.Dock="Right" Content="&#xE711;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10"
+                                            Padding="5,3" MinWidth="0" ToolTip="Remove this prerequisite"
+                                            Command="{Binding DataContext.RemovePrerequisiteCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding}" />
+                                    <TextBlock Text="{Binding Display}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <DockPanel Margin="0,4,0,12">
+                        <Button DockPanel.Dock="Right" Content="Add" Command="{Binding AddPrerequisiteCommand}" Margin="4,0,0,0" />
+                        <ComboBox ItemsSource="{Binding AllSubjects}" SelectedItem="{Binding PrerequisiteToAdd}" IsTextSearchEnabled="True"
+                                  ToolTip="Choose a subject this one should require" />
+                    </DockPanel>
+
+                    <TextBlock Text="Unlocks and leads to" FontWeight="SemiBold" Margin="0,0,0,4" />
+                    <ItemsControl ItemsSource="{Binding SelectedUnlocks}" Margin="0,0,0,16">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <TextBlock Text="{Binding}" TextTrimming="CharacterEllipsis" Margin="0,1" />
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+                <TextBlock Text="Click an icon to see and edit its prerequisites." Style="{StaticResource Muted}" Margin="0,0,0,16" TextWrapping="Wrap"
+                           Visibility="{Binding HasSelection, Converter={StaticResource InverseBoolToVisibility}}" />
+
+                <TextBlock Text="Not on the research screen" FontWeight="SemiBold" Margin="0,0,0,2" />
+                <TextBlock Text="Drag onto a free cell to place." Style="{StaticResource Muted}" FontSize="12" Margin="0,0,0,4" />
+                <TextBlock Text="Every subject has a place." Style="{StaticResource Muted}" Margin="0,0,0,16"
+                           Visibility="{Binding Unplaced.Count, Converter={StaticResource ZeroToVisible}}" />
+                <ListBox x:Name="Tray" ItemsSource="{Binding Unplaced}" DisplayMemberPath="Display" MaxHeight="180" Margin="0,0,0,16"
+                         PreviewMouseMove="Tray_PreviewMouseMove" BorderThickness="0" />
+
+                <TextBlock Text="{Binding IssueSummary}" FontWeight="SemiBold" Margin="0,0,0,4" />
+                <ItemsControl ItemsSource="{Binding Issues}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="{x:Type rs:IssueRow}">
+                            <TextBlock TextWrapping="Wrap" Margin="0,2">
+                                <Hyperlink Command="{Binding DataContext.ShowIssueCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                           CommandParameter="{Binding}" IsEnabled="{Binding Subject, Converter={StaticResource NotNull}}">
+                                    <Run Text="{Binding Severity, Mode=OneWay}" />
+                                </Hyperlink>
+                                <Run Text="{Binding Message, Mode=OneWay}" />
+                            </TextBlock>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

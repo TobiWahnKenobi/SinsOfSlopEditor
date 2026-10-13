@@ -136,6 +136,7 @@ public partial class App : Application
                 "category" => new CategoryTarget(parts[1]),
                 "entity" => new EntityTarget(parts[1]),
                 "problems" => new ProblemsTarget(parts.Length > 1 ? parts[1] : null),
+                "research" => new ResearchTarget(parts[1]),
                 _ => new DashboardTarget(),
             };
         }
