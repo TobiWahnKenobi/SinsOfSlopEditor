@@ -3,10 +3,12 @@ using SinsEditor.Core.Validation;
 
 namespace SinsEditor.Core.Editing;
 
-/// <summary>A planned change to one file of the edited mod: new content, or deletion when <paramref name="Content"/> is null.</summary>
-public sealed record FileChange(string RelativePath, SinsDocument? Content, string Description)
+/// <summary>
+/// A planned change to one file of the edited mod: new text content, raw bytes (e.g. a texture), or deletion when both are null.
+/// </summary>
+public sealed record FileChange(string RelativePath, SinsDocument? Content, string Description, byte[]? Bytes = null)
 {
-    public bool IsDelete => Content is null;
+    public bool IsDelete => Content is null && Bytes is null;
 }
 
 /// <summary>
@@ -39,6 +41,11 @@ public sealed class ChangeSet(string title)
         foreach (var change in _changes)
         {
             string target = Path.Combine(mod.RootPath, change.RelativePath.Replace('/', Path.DirectorySeparatorChar));
+            if (change.Bytes is { } bytes)
+            {
+                SafeWrite.Bytes(bytes, target);
+                continue;
+            }
             if (change.Content is null)
             {
                 if (File.Exists(target)) File.Delete(target);
