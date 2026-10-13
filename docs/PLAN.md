@@ -155,19 +155,26 @@ The schema says what each field means, which is what turns raw text into forms, 
     under a new name rather than overridden, so brushes elsewhere that use the original keep working.
   - **Packing:** when images are added, the atlas is rebuilt from all brushes stored in it, packed with a MaxRects bin packer
     into the smallest power-of-two texture (up to 4096×4096; a second atlas is started beyond that).
-    - Regions are aligned to 4 px and padded (edge pixels repeated into a gutter), because DXT compresses 4×4 blocks
-      and mipmaps blend neighbours; otherwise icons bleed into each other.
+    - Regions get a 2 px gutter (edge pixels repeated) so scaled icons don't bleed into each other. DDS atlases additionally
+      align regions to 4 px and use a wider gutter, because DXT compresses 4×4 blocks and mipmaps blend neighbours.
     - Several brushes or states using identical pixels share one region.
     - Every brush pointing into a repacked atlas gets its new `pixelBox`, in whatever `.brushes` file of the edited mod
       it lives. If brushes in lower layers point into the atlas, the editor packs only into free space instead of moving
       existing regions (or asks to copy the atlas under a new name).
     - Regions no brush uses any more are reported and dropped on the next repack.
-  - **Writing textures:** DDS in the format the atlas had (in practice DXT5, sometimes DXT1/DXT3 or uncompressed) with a
-    full mip chain, via BCnEncoder.Net; TGA stays TGA. Written through the usual temporary-file-then-move.
+  - **Writing textures:** TGA is the main format (90% of brush images). New atlases are TGA, uncompressed 32-bit BGRA with
+    8 alpha bits and bottom-left origin, exactly what the game uses; written by the editor's own TGA encoder.
+    Existing atlases keep their variant: RLE stays RLE; 24-bit becomes 32-bit only if an imported image has transparency.
+    DDS atlases (about 10% of brush images) keep their DDS format (DXT5/DXT1/DXT3/uncompressed) with a full mip chain,
+    via BCnEncoder.Net. All written through the usual temporary-file-then-move.
   - **Checks:** brush name collisions across layers, `pixelBox` outside the texture, texture missing, atlas larger than
     the game handles, brushes defined but used by nothing.
-  - Test-mod facts: 280 of 311 mod textures are DXT5 with mipmaps, power-of-two sizes from 128 to 4096; the game has
-    758 DXT5, 41 DXT3, 25 DXT1, 468 TGA.
+  - Facts from the test setup (base game + SotyrRemasteredClaude), counted by what brushes point to:
+    9,339 brush images in 70 TGA textures, 670 in 14 DXT5, 228 in 7 DXT1, 112 in 4 uncompressed DDS, 1 in DXT3.
+    The edited mod's own brushes: 324 TGA, 37 DXT5, 11 uncompressed DDS.
+    TGA variants: game 347 uncompressed 32-bit, 77 uncompressed 24-bit, 41 RLE 32-bit; mod 44 / 1 / 4 (+3 16-bit),
+    all bottom-left origin. TGA sizes needn't be powers of two (145 game pictures are 177×92), but atlases are packed
+    to power-of-two sizes by default as the safe choice.
 - **Game debug log:** load a log the game wrote to see which errors still need fixing.
   - Folder: `Documents\my games\Ironclad Games\Sins of a Solar Empire Rebellion\Debug` (found via the Documents folder, which may
     be redirected, e.g. to OneDrive), one `log-<process id>.txt` per game run. On the test machine: 125 logs, 505 MB, 2020–2026.
