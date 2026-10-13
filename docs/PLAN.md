@@ -25,8 +25,10 @@ Base game           ← read-only, binary files converted via cache
 ```
 
 - A file in a higher layer overrides the same path below it. Every item knows which layer it comes from and what it overrides.
-- When opening a mod, the base-mod stack is pre-filled from the game's `EnabledMods.txt` (minus the edited mod) and can be
-  reordered or changed. The chosen stack is remembered per edited mod in the editor settings.
+- When opening a mod, the base-mod stack is pre-filled from the game's `EnabledMods.txt`:
+  - edited mod is in the list → only the mods listed before it;
+  - edited mod is not in the list → all listed mods.
+  The stack can then be reordered or changed. The chosen stack is remembered per edited mod in the editor settings.
 - Editing an item that only exists in a lower layer copies it into the edited mod first ("override"), after confirmation.
 - Deleting is only possible for files in the edited mod. Deleting an override reveals the lower layer's version again.
 - Layer order semantics of the game's mod list are to be verified against the game before M1 ships.
