@@ -141,6 +141,16 @@ The schema says what each field means, which is what turns raw text into forms, 
 - **List views:** grid with type-specific columns, filter chips (race, role, armor type, layer, has problems, …),
   free-text search, column sort. Filter presets saved in app settings.
 - **Dashboard:** counts per category and per race, layer summary (mod / base game / overridden), problems by severity, recently edited.
+- **Game debug log:** load a log the game wrote to see which errors still need fixing.
+  - Folder: `Documents\my games\Ironclad Games\Sins of a Solar Empire Rebellion\Debug` (found via the Documents folder, which may
+    be redirected, e.g. to OneDrive), one `log-<process id>.txt` per game run. Newest is offered by default; others selectable.
+  - Logs reach 100+ MB: read streaming, in the background, and collapse repeated messages into one row with a count.
+  - Seen in the logs: the mods found and loaded, shader compiler warnings with `file(line,col)`, engine asserts with
+    source locations. Further message kinds (missing files, entity errors) to be catalogued from real logs.
+  - Classify each message (error / warning / info, kind), extract file paths, and map them to mod files and entities,
+    so a log line links to the entity page like any other problem. Filter to messages about the edited mod.
+  - Shown as its own source on the Problems page and on the dashboard ("Game log: N errors"); warns if the log is
+    from a session without the edited mod loaded, or older than the mod's last change.
 
 ## Milestones
 
@@ -155,6 +165,7 @@ The schema says what each field means, which is what turns raw text into forms, 
 | M5 | Create / duplicate / rename / delete | Delete warns about "used by" and offers to clean up; rename updates all references |
 | M5b | Research tree editor | Per-race graphical editor: move subjects, add/remove prerequisites, create subjects, live overlap/cycle checks |
 | M6 | Validation | Problems view + dashboard: missing refs, count mismatches, manifest drift, orphans, duplicate/missing strings, parse errors |
+| M6b | Game debug log | Pick a log from the Debug folder; grouped, classified messages with links to files/entities; shown with the problems |
 | M7 | Previews | Texture/brush preview, then mesh preview via HelixToolkit (roadmap items 2–4) |
 
 M6 rules start appearing earlier wherever they're cheap (parse errors in M0, missing refs in M1).
