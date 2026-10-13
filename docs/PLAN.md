@@ -15,7 +15,8 @@ Mod editor for Sins of a Solar Empire: Rebellion. WPF + HelixToolkit, .NET 9, Wi
   encoding of the same file in the base game (binary game files → UTF-8 with BOM, like ConvertData's output).
   New files: UTF-8 with BOM for `.entity`/`.mesh`/`.particle`/`.brushes`, plain UTF-8 otherwise.
   Non-ASCII content always gets a BOM. Non-UTF-8 input is read as Windows-1252 and converted.
-  Files the editor doesn't write stay untouched; validation lists deviating files, with a "convert all" fix.
+  Files the editor doesn't write stay untouched. Deviating files are reported as one problem on the dashboard
+  ("N files don't match the game's encoding/line endings") with a "Fix all" button and a per-file list.
 - **Binary files are converted with the game's `ConvertData_Rebellion.exe`**, never with a custom parser.
 - **Exactly one mod is editable.** Everything below it is read-only.
 
