@@ -26,4 +26,23 @@ public static class ProblemCodes
     public const string MissingBrushFile = "missing-brush-file";
     public const string ConversionFailed = "conversion-failed";
     public const string MissingManifest = "missing-manifest";
+    public const string ConventionMismatch = "convention-mismatch";
+    public const string BrushImageProblem = "brush-image";
+
+    /// <summary>Short title for a group of problems on the dashboard.</summary>
+    public static string Title(string code) => code switch
+    {
+        ManifestEntryWithoutFile => "Manifest entry without file",
+        EntityNotInManifest => "Entity not in manifest",
+        MissingReference => "Missing reference",
+        DuplicateString => "Duplicate string ID",
+        StringCountMismatch => "String count mismatch",
+        DuplicateBrush => "Duplicate brush",
+        MissingBrushFile => "Missing brush file",
+        ConversionFailed => "Conversion failed",
+        MissingManifest => "Missing manifest",
+        ConventionMismatch => "Encoding or line endings",
+        BrushImageProblem => "Brush image outside texture",
+        _ => code,
+    };
 }

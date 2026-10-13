@@ -47,4 +47,7 @@ public readonly record struct PixelBox(int X, int Y, int Width, int Height)
         box = new PixelBox((int)v[0], (int)v[1], (int)v[2], (int)v[3]);
         return true;
     }
+
+    /// <summary>Same notation as the files.</summary>
+    public override string ToString() => $"[{X}, {Y}, {Width}, {Height}]";
 }

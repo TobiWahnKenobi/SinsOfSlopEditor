@@ -60,6 +60,19 @@ public static class Languages
         return null;
     }
 
+    /// <summary>
+    /// The base game's counterpart of a mod path: <c>String/English.str</c> → <c>Localizations/en/String/English.str</c>.
+    /// Other paths are returned unchanged.
+    /// </summary>
+    public static string GameCounterpart(string modRelativePath)
+    {
+        string path = Layer.Normalize(modRelativePath);
+        if (path.StartsWith("String/", StringComparison.OrdinalIgnoreCase) && path.EndsWith(".str", StringComparison.OrdinalIgnoreCase)
+            && GameCodes.TryGetValue(Path.GetFileNameWithoutExtension(path), out var code))
+            return $"Localizations/{code}/String/English.str";
+        return path;
+    }
+
     /// <summary>Where <paramref name="layer"/> would keep the string table for <paramref name="language"/>.</summary>
     public static string StringFilePath(Layer layer, string language) =>
         layer.Kind == LayerKind.BaseGame && GameCodes.TryGetValue(language, out var code)

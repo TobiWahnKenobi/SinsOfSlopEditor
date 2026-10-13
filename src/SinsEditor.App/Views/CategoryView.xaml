@@ -1,0 +1,41 @@
+<UserControl x:Class="SinsEditor.App.Views.CategoryView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:SinsEditor.App.ViewModels">
+    <DockPanel Margin="24,24,24,12">
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Title}" Style="{StaticResource PageTitle}" Margin="0,0,0,12" />
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <TextBlock DockPanel.Dock="Right" Text="{Binding CountText}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,0,0" />
+            <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Width="360" HorizontalAlignment="Left"
+                     ToolTip="Search by name, internal name or race" />
+        </DockPanel>
+        <DataGrid ItemsSource="{Binding View}" Style="{StaticResource ListGrid}"
+                  MouseDoubleClick="List_MouseDoubleClick" PreviewKeyDown="List_KeyDown">
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Width="48" CanUserSort="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="{x:Type vm:EntityRow}">
+                            <Image Source="{Binding Icon}" Width="36" Height="26" Stretch="Uniform" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Name" Width="2*" SortMemberPath="DisplayName">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="{x:Type vm:EntityRow}">
+                            <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                <Hyperlink Command="{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                           CommandParameter="{Binding}">
+                                    <Run Text="{Binding DisplayName, Mode=OneWay}" />
+                                </Hyperlink>
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Internal name" Width="2*" Binding="{Binding Name}" />
+                <DataGridTextColumn Header="Type" Width="*" Binding="{Binding EntityType}" />
+                <DataGridTextColumn Header="Races" Width="*" Binding="{Binding Races}" />
+                <DataGridTextColumn Header="Layer" Width="*" Binding="{Binding Layer}" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</UserControl>

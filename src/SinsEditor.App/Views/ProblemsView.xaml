@@ -1,0 +1,40 @@
+<UserControl x:Class="SinsEditor.App.Views.ProblemsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:SinsEditor.App.ViewModels">
+    <DockPanel Margin="24,24,24,12">
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Title}" Style="{StaticResource PageTitle}" Margin="0,0,0,12" />
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <ComboBox DockPanel.Dock="Left" ItemsSource="{Binding Codes}" SelectedItem="{Binding SelectedCode}"
+                      DisplayMemberPath="Title" Width="260" Margin="0,0,12,0" />
+            <TextBlock DockPanel.Dock="Right" Text="{Binding CountText}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,0,0" />
+            <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}" Width="360" HorizontalAlignment="Left"
+                     ToolTip="Search messages and file paths" />
+        </DockPanel>
+        <DataGrid ItemsSource="{Binding View}" Style="{StaticResource ListGrid}" MouseDoubleClick="List_MouseDoubleClick">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Severity" Width="90" Binding="{Binding Severity}" />
+                <DataGridTextColumn Header="Problem" Width="200" Binding="{Binding Title}" />
+                <DataGridTemplateColumn Header="Message" Width="3*" SortMemberPath="Message">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="{x:Type vm:ProblemRow}">
+                            <TextBlock Text="{Binding Message}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Message}" VerticalAlignment="Center" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Location" Width="2*" SortMemberPath="Location">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="{x:Type vm:ProblemRow}">
+                            <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                <Hyperlink Command="{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                           CommandParameter="{Binding}" IsEnabled="{Binding Target, Converter={StaticResource NotNull}}">
+                                    <Run Text="{Binding Location, Mode=OneWay}" />
+                                </Hyperlink>
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</UserControl>
