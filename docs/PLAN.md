@@ -39,9 +39,19 @@ Base game           ← read-only, binary files converted via cache
 - Deleting is only possible for files in the edited mod. Deleting an override reveals the lower layer's version again.
 - Layer order semantics of the game's mod list are to be verified against the game before M1 ships.
 
+### Manifests
+
+- The highest layer's `entity.manifest` replaces lower ones entirely (the test mod's lists all 3,505 entities).
+- Entities not in the effective manifest are inactive: the game doesn't load them, references to them count as missing,
+  and they're excluded from races, reference inference and validation. Only unlisted files in the edited mod are reported.
+- `brush.manifest` works the same way for `Window/*.brushes`.
+
 ## Language
 
-- Available languages = `String/*.str` across all layers (e.g. `English.str`). The user picks one per edited mod.
+- The base game keeps its text in `Localizations/<code>/String/English.str` (every language's file is named English.str);
+  mods use `String/<Language>.str`.
+- Available languages = `String/*.str` across the mod layers; if no mod has any, the game's localizations.
+  The user picks one per edited mod. A language missing in the mods falls back to the game's localization.
 - Display names everywhere come from the chosen language. String edits go to that language's file in the edited mod.
 - Validation reports string IDs that exist in one language file but not in another.
 
@@ -78,6 +88,11 @@ SinsEditor.Tests     Round-trip tests over every file of the test mod + converte
 
 The schema says what each field means, which is what turns raw text into forms, pickers and validation.
 
+0. **Reference inference (built in M1):** for each qualified key (`parentKey/key`, e.g. `ResearchPrerequisite/Subject`),
+   if at least half of its non-empty string values resolve to one kind of target (entity, string, brush, mesh, particle,
+   texture, sound), the key is a reference of that kind and its unresolved values are reported as missing.
+   Qualifying by parent matters: `type` is a ship under `requiredShip` but a setting in quest entities.
+   Asset references may include the file extension (`meshName "Sentry.mesh"`).
 1. **Bootstrap automatically:** scan all game and mod files, record every key per entity type, value kind
    (int/float/bool/string), observed enum values, and list/counter pairs.
 2. **Curate by hand:** mark which string fields reference what (entity of type X, string ID, mesh, brush, sound, …),

@@ -157,6 +157,26 @@ public sealed class SinsDocument
         if (wasLast && index > 0 && ending.Length == 0) Lines[index - 1].Ending = "";
     }
 
+    /// <summary>
+    /// For each line, the index of its parent line by indentation (-1 for top level and blank lines).
+    /// Same rules as <see cref="BuildTree"/>, without allocating nodes.
+    /// </summary>
+    public int[] GetParentIndices()
+    {
+        var parents = new int[Lines.Count];
+        var stack = new List<int>();
+        parents[0] = -1;
+        for (int i = 1; i < Lines.Count; i++)
+        {
+            if (Lines[i].IsBlank) { parents[i] = -1; continue; }
+            int depth = Lines[i].Depth;
+            while (stack.Count > 0 && Lines[stack[^1]].Depth >= depth) stack.RemoveAt(stack.Count - 1);
+            parents[i] = stack.Count > 0 ? stack[^1] : -1;
+            stack.Add(i);
+        }
+        return parents;
+    }
+
     /// <summary>Builds a tree from indentation. Tolerates irregular indentation: a line's parent is the nearest previous line with smaller depth.</summary>
     public SinsNode BuildTree()
     {
