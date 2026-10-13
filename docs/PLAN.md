@@ -143,8 +143,10 @@ The schema says what each field means, which is what turns raw text into forms, 
 - **Dashboard:** counts per category and per race, layer summary (mod / base game / overridden), problems by severity, recently edited.
 - **Game debug log:** load a log the game wrote to see which errors still need fixing.
   - Folder: `Documents\my games\Ironclad Games\Sins of a Solar Empire Rebellion\Debug` (found via the Documents folder, which may
-    be redirected, e.g. to OneDrive), one `log-<process id>.txt` per game run. Newest is offered by default; others selectable.
-  - Logs reach 100+ MB: read streaming, in the background, and collapse repeated messages into one row with a count.
+    be redirected, e.g. to OneDrive), one `log-<process id>.txt` per game run. On the test machine: 125 logs, 505 MB, 2020–2026.
+  - Log picker lists every log with date, size and the mods that run loaded (read from the log's header only, so it's fast).
+    Pre-selects the newest log in which the edited mod was loaded. Offers to delete old logs (after confirmation).
+  - Logs reach 185 MB: read streaming, in the background, and collapse repeated messages into one row with a count.
   - Seen in the logs: the mods found and loaded, shader compiler warnings with `file(line,col)`, engine asserts with
     source locations. Further message kinds (missing files, entity errors) to be catalogued from real logs.
   - Classify each message (error / warning / info, kind), extract file paths, and map them to mod files and entities,
