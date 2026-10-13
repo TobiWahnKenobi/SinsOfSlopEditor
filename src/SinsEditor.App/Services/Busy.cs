@@ -46,8 +46,10 @@ public sealed partial class Busy : ObservableObject
         });
         try
         {
-            // Let the overlay render before the work starts, even if the work begins synchronously.
-            await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
+            // Let the overlay render before the work starts, even if the work begins synchronously. Only with a running
+            // app on this thread: without one (tests) nothing would process the yield and it would never return.
+            if (System.Windows.Application.Current?.Dispatcher is { } dispatcher && dispatcher.CheckAccess())
+                await System.Windows.Threading.Dispatcher.Yield(System.Windows.Threading.DispatcherPriority.Background);
             return await work(progress);
         }
         finally
