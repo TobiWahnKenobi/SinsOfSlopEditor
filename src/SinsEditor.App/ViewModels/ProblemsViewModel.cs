@@ -78,6 +78,6 @@ public sealed partial class ProblemsViewModel : PageViewModel
     {
         if (problem.RelativePath is not { } path || !path.EndsWith(".entity", StringComparison.OrdinalIgnoreCase)) return null;
         string name = Path.GetFileNameWithoutExtension(path);
-        return workspace.Index.Entities.ContainsKey(name) ? new EntityTarget(name) : null;
+        return workspace.Index.Entities.ContainsKey(name) ? new EntityTarget(name, problem.LineIndex) : null;
     }
 }

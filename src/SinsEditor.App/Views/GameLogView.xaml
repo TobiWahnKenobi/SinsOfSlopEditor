@@ -1,0 +1,62 @@
+<UserControl x:Class="SinsEditor.App.Views.GameLogView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="clr-namespace:SinsEditor.App.ViewModels">
+    <DockPanel Margin="24,24,24,12">
+        <TextBlock DockPanel.Dock="Top" Text="{Binding Title}" Style="{StaticResource PageTitle}" Margin="0,0,0,12" />
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Margin="8,0,0,0">
+                <Button Content="Reload" Command="{Binding ReloadCommand}" Margin="0,0,6,0" ToolTip="Read the log again, e.g. while the game is running" />
+                <Button Content="Open in editor" Command="{Binding OpenFileCommand}" Margin="0,0,6,0" />
+                <Button Content="Browse…" Command="{Binding BrowseCommand}" />
+            </StackPanel>
+            <ComboBox ItemsSource="{Binding Logs}" SelectedItem="{Binding SelectedLog}" DisplayMemberPath="Text" />
+        </DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="{Binding ModWarning}" Foreground="{StaticResource WarningBrush}" TextWrapping="Wrap" Margin="0,0,0,8"
+                   Visibility="{Binding ModWarning, Converter={StaticResource NullToCollapsed}}" />
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <ComboBox DockPanel.Dock="Left" ItemsSource="{Binding Kinds}" SelectedItem="{Binding SelectedKind}" DisplayMemberPath="Title" Width="180" Margin="0,0,12,0" />
+            <TextBlock DockPanel.Dock="Right" Text="{Binding CountText}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,0,0" />
+            <CheckBox DockPanel.Dock="Right" Content="Engine checks and shaders" IsChecked="{Binding ShowEngine}" VerticalAlignment="Center" Margin="12,0,0,0"
+                      ToolTip="Internal checks of the engine and shader compiler output. They rarely point at mod data." />
+            <CheckBox DockPanel.Dock="Right" Content="Only this mod" IsChecked="{Binding OnlyMod}" VerticalAlignment="Center" Margin="12,0,0,0"
+                      ToolTip="Messages about the mod's files and entities, and things the game couldn't find" />
+            <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=200}" Width="300" HorizontalAlignment="Left" ToolTip="Search messages and locations" />
+        </DockPanel>
+        <Grid DockPanel.Dock="Top" Margin="0,0,0,8">
+            <ProgressBar Value="{Binding Progress}" Maximum="1" Height="4" VerticalAlignment="Top"
+                         Visibility="{Binding IsReading, Converter={StaticResource BoolToVisibility}}" />
+            <TextBlock Text="{Binding Status}" Style="{StaticResource Muted}" Margin="0,8,0,0" TextWrapping="Wrap" />
+        </Grid>
+        <DataGrid ItemsSource="{Binding View}" Style="{StaticResource ListGrid}" MouseDoubleClick="List_MouseDoubleClick">
+            <DataGrid.Columns>
+                <DataGridTextColumn Header="Severity" Width="80" Binding="{Binding Severity}" />
+                <DataGridTextColumn Header="Kind" Width="130" Binding="{Binding Kind}" />
+                <DataGridTextColumn Header="Count" Width="70" Binding="{Binding Count, StringFormat=N0}" />
+                <DataGridTemplateColumn Header="Message" Width="3*" SortMemberPath="Message">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="{x:Type vm:LogRow}">
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="{Binding Message}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Group.Example}" />
+                                <TextBlock Text="{Binding Detail}" Style="{StaticResource Muted}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                           Visibility="{Binding Detail, Converter={StaticResource NullToCollapsed}}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Location" Width="2*" SortMemberPath="Location">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="{x:Type vm:LogRow}">
+                            <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Location}">
+                                <Hyperlink Command="{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                           CommandParameter="{Binding}" IsEnabled="{Binding Target, Converter={StaticResource NotNull}}">
+                                    <Run Text="{Binding Location, Mode=OneWay}" />
+                                </Hyperlink>
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</UserControl>

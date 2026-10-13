@@ -149,7 +149,8 @@ public partial class App : Application
             return parts[0] switch
             {
                 "category" => new CategoryTarget(parts[1]),
-                "entity" => new EntityTarget(parts[1]),
+                "entity" => parts[1].Split('@') is [var name, var line] && int.TryParse(line, out int n) ? new EntityTarget(name, n - 1) : new EntityTarget(parts[1]),
+                "log" => new GameLogTarget(parts.Length > 1 && parts[1].Length > 0 ? parts[1] : null),
                 "problems" => new ProblemsTarget(parts.Length > 1 ? parts[1] : null),
                 "research" => new ResearchTarget(parts[1]),
                 "brushes" => new BrushListTarget(),

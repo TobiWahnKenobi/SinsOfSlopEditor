@@ -11,13 +11,17 @@ public sealed record DashboardTarget : NavTarget;
 
 public sealed record CategoryTarget(string CategoryId) : NavTarget;
 
-public sealed record EntityTarget(string EntityName) : NavTarget;
+/// <summary>An entity's page; <paramref name="Line"/> (a line index of its file) is shown and selected on arrival.</summary>
+public sealed record EntityTarget(string EntityName, int? Line = null) : NavTarget;
 
 public sealed record ProblemsTarget(string? Code = null) : NavTarget;
 
 public sealed record ResearchTarget(string RaceName) : NavTarget;
 
 public sealed record BrushListTarget : NavTarget;
+
+/// <summary>The game's debug log: a specific log file, or the best one for the mod.</summary>
+public sealed record GameLogTarget(string? LogPath = null) : NavTarget;
 
 /// <summary>Brush editor; a null name creates a new brush.</summary>
 public sealed record BrushTarget(string? BrushName) : NavTarget;

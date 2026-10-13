@@ -44,6 +44,11 @@ public partial class EntityView : UserControl
             _vm.ShowLineRequested += ShowLine;
             _vm.FlushRawText = FlushRawText;
             ReloadRawText();
+            if (_vm.PendingLine is { } line)
+            {
+                _vm.PendingLine = null;
+                Dispatcher.BeginInvoke(() => ShowLine(line), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            }
         }
     }
 

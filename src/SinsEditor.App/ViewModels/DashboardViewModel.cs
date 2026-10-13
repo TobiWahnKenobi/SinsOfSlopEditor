@@ -70,6 +70,7 @@ public sealed partial class DashboardViewModel : PageViewModel
             .ThenByDescending(g => g.Count)
             .ToList();
 
+        _ = FindGameLogAsync();
         Layers = workspace.Stack.Layers
             .Reverse()
             .Select(layer => new LayerRow(
@@ -90,6 +91,27 @@ public sealed partial class DashboardViewModel : PageViewModel
     public IReadOnlyList<ProblemGroup> ProblemGroups { get; }
     public IReadOnlyList<LayerRow> Layers { get; }
     public bool HasNoProblems => ProblemGroups.Count == 0;
+    public NavTarget GameLogTarget { get; } = new GameLogTarget();
+
+    /// <summary>The newest debug log that ran this mod, if any (only its header is read here).</summary>
+    public string? GameLogText { get; private set; }
+
+    // Reads the headers of all logs, so off the UI thread.
+    private async Task FindGameLogAsync()
+    {
+        GameLogText = await Task.Run(DescribeGameLog);
+        OnPropertyChanged(nameof(GameLogText));
+    }
+
+    private string? DescribeGameLog()
+    {
+        if (Core.Logs.GameLog.FindFolder(_workspace.Stack.EditedMod?.RootPath) is not { } folder) return null;
+        var logs = Core.Logs.GameLog.List(folder);
+        var log = logs.FirstOrDefault(l => l.EnabledMods.Contains(_workspace.ModName, StringComparer.OrdinalIgnoreCase));
+        return log is null
+            ? $"No game log has {_workspace.ModName} enabled yet ({logs.Count} logs in the Debug folder)."
+            : $"The game last ran {_workspace.ModName} on {log.Written:g} ({log.FileName}).";
+    }
 
     [RelayCommand]
     private void Open(NavTarget target) => _navigate(target);

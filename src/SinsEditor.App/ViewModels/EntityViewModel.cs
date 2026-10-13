@@ -70,13 +70,17 @@ public sealed partial class EntityViewModel : PageViewModel
         get
         {
             int errors = Problems.Count(p => p.Severity == Core.Validation.ProblemSeverity.Error);
-            int others = Problems.Count - errors;
+            int warnings = Problems.Count(p => p.Severity == Core.Validation.ProblemSeverity.Warning);
+            int notes = Problems.Count - errors - warnings;
             string total = Problems.Count == 1 ? "1 problem" : $"{Problems.Count} problems";
-            return errors > 0 && others > 0
-                ? $"{total} ({errors} {(errors == 1 ? "error" : "errors")}, {others} {(others == 1 ? "warning" : "warnings")})"
-                : total;
+            var parts = new[] { (errors, "error", "errors"), (warnings, "warning", "warnings"), (notes, "note", "notes") }
+                .Where(p => p.Item1 > 0).Select(p => $"{p.Item1} {(p.Item1 == 1 ? p.Item2 : p.Item3)}").ToList();
+            return parts.Count > 1 ? $"{total} ({string.Join(", ", parts)})" : total;
         }
     }
+
+    /// <summary>A line to show once the view is up (navigation to an entity at a line).</summary>
+    public int? PendingLine { get; set; }
 
     /// <summary>Asks the view to show a line in the form (switch tab, clear the filter, scroll, select).</summary>
     public event Action<int>? ShowLineRequested;

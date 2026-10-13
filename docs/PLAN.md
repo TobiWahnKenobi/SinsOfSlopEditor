@@ -209,6 +209,18 @@ The schema says what each field means, which is what turns raw text into forms, 
 - **Manifests** of the mod: counter vs. entries, repeated entries, listed files that don't exist.
 - **Unused entities** (Info): mod entities nothing refers to, for types whose base-game entities nearly always are.
 
+### Game debug log
+
+- Logs live in `Debug/` next to the mods folder (`log-<pid>.txt`, UTF-8 with BOM, up to ~125 MB); the header lists the
+  enabled mods (`Found N Enabled Mods in …EnabledMods.txt` + `> name` lines). The page preselects the newest log that ran
+  the edited mod. A 123 MB log reads in about 2 s, streamed in the background; results are kept while the editor runs.
+- Messages are grouped with numbers masked and classified: parse errors (`Text FileArchive missing Label.` + File, Label,
+  Line Number, Line Contents; the game counts lines from 1 with `TXT` as line 1), missing data files, brushes and
+  entities, texture errors, `Error - …` data errors, weapons without weapon points, engine asserts and shader output
+  (hidden by default), and other lines mentioning failures. Activity (button presses, chat, device state) is skipped.
+- Files are matched to layers by folder name, since logs may come from another machine or another copy of the mod;
+  entity files and named entities link to the entity page at the line, brushes to the brush editor.
+
 ## Milestones
 
 | # | Milestone | Done when |

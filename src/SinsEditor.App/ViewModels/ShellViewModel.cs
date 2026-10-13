@@ -317,6 +317,7 @@ public sealed partial class ShellViewModel : ObservableObject
             if (count > 0) NavItems.Add(new NavItem(category.Name, new CategoryTarget(category.Id), count));
         }
         NavItems.Add(new NavItem("Brushes", new BrushListTarget(), index.Brushes.Entries.Count));
+        NavItems.Add(new NavItem("Game log", new GameLogTarget(), null));
         NavItems.Add(new NavItem("Problems", new ProblemsTarget(), Workspace.ProblemCount, isProblems: true));
     }
 
@@ -330,7 +331,8 @@ public sealed partial class ShellViewModel : ObservableObject
                 || (page is EntityViewModel ev && item.Target == new CategoryTarget(ev.Category.Id))
                 || (page is RaceViewModel or Research.ResearchViewModel && item.Target == new CategoryTarget(EntityCategories.Races.Id))
                 || (target is ProblemsTarget && item.IsProblems)
-                || (target is BrushTarget && item.Target is BrushListTarget);
+                || (target is BrushTarget && item.Target is BrushListTarget)
+                || (target is GameLogTarget && item.Target is GameLogTarget);
         }
     }
 
@@ -342,14 +344,25 @@ public sealed partial class ShellViewModel : ObservableObject
         {
             DashboardTarget => new DashboardViewModel(ws, navigate, ReloadAsync),
             CategoryTarget c when EntityCategories.ById(c.CategoryId) is { } category => new CategoryViewModel(ws, category, navigate),
-            EntityTarget e when ws.Index.Entities.TryGetValue(e.EntityName, out var entity) =>
-                entity.EntityType == "Player" ? new RaceViewModel(ws, entity, navigate) : new EntityViewModel(ws, entity, navigate),
+            EntityTarget e when ws.Index.Entities.TryGetValue(e.EntityName, out var entity) => EntityPage(ws, entity, e.Line, navigate),
             ProblemsTarget p => new ProblemsViewModel(ws, p.Code, navigate),
             ResearchTarget r when ws.Index.Entities.TryGetValue(r.RaceName, out var race) => new Research.ResearchViewModel(ws, race, navigate),
             BrushListTarget => new BrushEditing.BrushListViewModel(ws, navigate),
+            GameLogTarget g => new GameLogViewModel(ws, g.LogPath, navigate),
             BrushTarget b when b.BrushName is null || ws.Index.Brushes.Contains(b.BrushName) =>
                 new BrushEditing.BrushEditorViewModel(ws, b.BrushName, navigate, ReloadAsync),
             _ => new DashboardViewModel(ws, navigate, ReloadAsync),
         };
+    }
+
+    private static PageViewModel EntityPage(ModWorkspace ws, EntityRecord entity, int? line, Action<NavTarget> navigate)
+    {
+        if (entity.EntityType == "Player")
+        {
+            var race = new RaceViewModel(ws, entity, navigate);
+            race.Detail.PendingLine = line;
+            return race;
+        }
+        return new EntityViewModel(ws, entity, navigate) { PendingLine = line };
     }
 }

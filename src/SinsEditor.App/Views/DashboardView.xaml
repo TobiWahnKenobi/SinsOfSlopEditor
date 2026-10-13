@@ -124,6 +124,10 @@
                 <!-- Problems -->
                 <StackPanel Grid.Column="2">
                     <TextBlock Text="Problems" Style="{StaticResource SectionHeader}" />
+                    <TextBlock Margin="0,0,0,8" TextWrapping="Wrap" Visibility="{Binding GameLogText, Converter={StaticResource NullToCollapsed}}">
+                        <Run Text="{Binding GameLogText, Mode=OneWay}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        <Hyperlink Command="{Binding OpenCommand}" CommandParameter="{Binding GameLogTarget}">Show what the game reported</Hyperlink>
+                    </TextBlock>
                     <TextBlock Text="No problems found." Style="{StaticResource Muted}"
                                Visibility="{Binding HasNoProblems, Converter={StaticResource BoolToVisibility}}" />
                     <ItemsControl ItemsSource="{Binding ProblemGroups}">
