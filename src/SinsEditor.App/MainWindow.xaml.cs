@@ -83,7 +83,21 @@ public partial class MainWindow : Window
 
     private async void OpenMod_Click(object sender, RoutedEventArgs e)
     {
+        if (!await ViewModel.ResolveUnsavedChangesAsync("opening another mod")) return;
         if (((App)Application.Current).ShowOpenModDialog(this) is { } options) await ViewModel.OpenAsync(options);
+    }
+
+    private bool _closeConfirmed;
+
+    /// <summary>Asks about unsaved changes; the window closes after they're saved or discarded.</summary>
+    protected override async void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        base.OnClosing(e);
+        if (_closeConfirmed || ViewModel.Workspace?.DirtySessions.Any() != true) return;
+        e.Cancel = true;
+        if (!await ViewModel.ResolveUnsavedChangesAsync("closing")) return;
+        _closeConfirmed = true;
+        Close();
     }
 
     private async void Reload_Click(object sender, RoutedEventArgs e) => await ViewModel.ReloadAsync();

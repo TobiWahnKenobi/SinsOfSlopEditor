@@ -1,8 +1,11 @@
 using System.Windows.Media.Imaging;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using SinsEditor.App.Editing;
 using SinsEditor.App.Imaging;
 using SinsEditor.App.Navigation;
 using SinsEditor.Core;
+using SinsEditor.Core.Editing;
 using SinsEditor.Core.Index;
 
 namespace SinsEditor.App.ViewModels;
@@ -14,25 +17,156 @@ public sealed record ReferenceRow(string Key, string Kind, string Target, string
 
 public sealed record ReferenceGroup(string Title, IReadOnlyList<ReferenceRow> Rows);
 
-/// <summary>Read-only entity page for M2: header, connected items both ways, and the raw text. Editing arrives in M4.</summary>
+/// <summary>
+/// Entity page: form editor, connected items both ways, and raw text. Edits live in the workspace's edit session
+/// for the entity, so every page showing it shares them and they survive navigating away.
+/// </summary>
 public sealed partial class EntityViewModel : PageViewModel
 {
+    private readonly ModWorkspace _workspace;
     private readonly Action<NavTarget> _navigate;
+
+    [ObservableProperty]
+    private string _displayName = "";
+
+    [ObservableProperty]
+    private BitmapSource? _icon;
+
+    [ObservableProperty]
+    private string _layerText = "";
+
+    [ObservableProperty]
+    private string? _overrideNotice;
+
+    [ObservableProperty]
+    private IReadOnlyList<ReferenceRow> _races = [];
+
+    [ObservableProperty]
+    private IReadOnlyList<ReferenceGroup> _uses = [];
+
+    [ObservableProperty]
+    private IReadOnlyList<ReferenceGroup> _usedBy = [];
+
+    [ObservableProperty]
+    private string? _statusMessage;
+
+    [ObservableProperty]
+    private bool _isSaving;
 
     public EntityViewModel(ModWorkspace workspace, EntityRecord entity, Action<NavTarget> navigate)
     {
+        _workspace = workspace;
         _navigate = navigate;
-        var index = workspace.Index;
-        Entity = entity;
+        Session = workspace.SessionFor(entity);
+        Editor = new PropertyEditorViewModel(workspace, Session, CandidateProvider.For(workspace), navigate);
+        Session.Changed += OnSessionChanged;
+        LoadInfo();
+    }
+
+    public EntityEditSession Session { get; }
+    public PropertyEditorViewModel Editor { get; }
+    public EntityRecord Entity => Session.Original;
+    public EntityCategory Category => EntityCategories.For(Entity.EntityType);
+    public override string Title => DisplayName;
+    public override string? Breadcrumb => Category.Name;
+    public override bool IsDirty => Session.IsDirty;
+
+    public string Subtitle => $"{Entity.Name} · {Entity.EntityType} · {Entity.File.RelativePath}";
+    public bool HasNoUsedBy => UsedBy.Count == 0;
+    public bool CanUndo => Session.CanUndo;
+    public bool CanRedo => Session.CanRedo;
+    public string UndoToolTip => Session.UndoDescription is { } d ? $"Undo {d} (Ctrl+Z)" : "Undo (Ctrl+Z)";
+    public string RedoToolTip => Session.RedoDescription is { } d ? $"Redo {d} (Ctrl+Y)" : "Redo (Ctrl+Y)";
+
+    public IReadOnlyList<SaveFormat> SaveFormats { get; } = [SaveFormat.Text, SaveFormat.Binary];
+
+    public SaveFormat SelectedFormat
+    {
+        get => Session.Format ?? _workspace.DefaultSaveFormat(Entity);
+        set
+        {
+            Session.Format = value;
+            OnPropertyChanged();
+        }
+    }
+
+    /// <summary>Raised when the document changed outside the raw text editor, so the view reloads its text.</summary>
+    public event Action? TextReloadRequested;
+
+    /// <summary>Set by the view while the raw text editor has unapplied changes; called before saving.</summary>
+    public Action? FlushRawText { get; set; }
+
+    public void ApplyRawText(string text) => Session.ReplaceText(text);
+
+    [RelayCommand(CanExecute = nameof(CanUndo))]
+    public void Undo() => Session.Undo();
+
+    [RelayCommand(CanExecute = nameof(CanRedo))]
+    public void Redo() => Session.Redo();
+
+    [RelayCommand]
+    public async Task SaveAsync()
+    {
+        FlushRawText?.Invoke();
+        if (!Session.IsDirty && SelectedFormat == _workspace.DefaultSaveFormat(Entity) && Entity.File.Layer.IsEditable) return;
+        IsSaving = true;
+        StatusMessage = null;
+        try
+        {
+            await _workspace.SaveAsync(Session, SelectedFormat);
+            StatusMessage = $"Saved to {_workspace.ModName}/{Entity.File.RelativePath}";
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or Core.Conversion.ConvertDataException)
+        {
+            StatusMessage = $"Couldn't save: {e.Message}";
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    [RelayCommand]
+    private void Open(ReferenceRow? row)
+    {
+        if (row?.NavTarget != null) _navigate(row.NavTarget);
+    }
+
+    public override void Detach()
+    {
+        Session.Changed -= OnSessionChanged;
+        Editor.Detach();
+    }
+
+    private void OnSessionChanged(EditKind kind)
+    {
+        OnPropertyChanged(nameof(IsDirty));
+        OnPropertyChanged(nameof(CanUndo));
+        OnPropertyChanged(nameof(CanRedo));
+        OnPropertyChanged(nameof(UndoToolTip));
+        OnPropertyChanged(nameof(RedoToolTip));
+        UndoCommand.NotifyCanExecuteChanged();
+        RedoCommand.NotifyCanExecuteChanged();
+        TextReloadRequested?.Invoke();
+        if (kind == EditKind.Saved) LoadInfo();
+    }
+
+    /// <summary>Header and connected items from the index (they reflect the last saved state).</summary>
+    private void LoadInfo()
+    {
+        var index = _workspace.Index;
+        var entity = Entity;
         DisplayName = index.DisplayName(entity) ?? entity.Name;
-        Category = EntityCategories.For(entity.EntityType);
-        Icon = ImageConverter.RenderBrush(workspace.Textures, CategoryViewModel.HudIcon(entity));
+        Icon = ImageConverter.RenderBrush(_workspace.Textures, CategoryViewModel.HudIcon(entity));
 
         string layer = entity.File.Layer.Name;
         LayerText = entity.File.IsOverride
             ? $"{layer}, overrides {string.Join(", ", entity.File.OverriddenLayers.Select(l => l.Name))}"
             : layer;
         if (!entity.InManifest) LayerText += " · not in entity.manifest";
+        OverrideNotice = entity.File.Layer.IsEditable
+            ? null
+            : $"This entity comes from {layer}. Saving puts a copy into {_workspace.ModName}, which then overrides it.";
 
         Races = index.RacesOwning(entity.Name)
             .Select(r => new ReferenceRow("", "Race", r.Name, index.DisplayName(r), true, new EntityTarget(r.Name), -1))
@@ -56,28 +190,10 @@ public sealed partial class EntityViewModel : PageViewModel
                 .ToList()))
             .ToList();
 
-        RawText = string.Join(Environment.NewLine, entity.Document.Lines.Select(l => l.Text));
-    }
-
-    public EntityRecord Entity { get; }
-    public EntityCategory Category { get; }
-    public override string Title => DisplayName;
-    public override string? Breadcrumb => Category.Name;
-
-    public string DisplayName { get; }
-    public string Subtitle => $"{Entity.Name} · {Entity.EntityType} · {Entity.File.RelativePath}";
-    public string LayerText { get; }
-    public BitmapSource? Icon { get; }
-    public IReadOnlyList<ReferenceRow> Races { get; }
-    public IReadOnlyList<ReferenceGroup> Uses { get; }
-    public IReadOnlyList<ReferenceGroup> UsedBy { get; }
-    public string RawText { get; }
-    public bool HasNoUsedBy => UsedBy.Count == 0;
-
-    [RelayCommand]
-    private void Open(ReferenceRow? row)
-    {
-        if (row?.NavTarget != null) _navigate(row.NavTarget);
+        OnPropertyChanged(nameof(Subtitle));
+        OnPropertyChanged(nameof(HasNoUsedBy));
+        OnPropertyChanged(nameof(Title));
+        OnPropertyChanged(nameof(SelectedFormat));
     }
 
     private static string GroupTitle(ReferenceKind kind, int count) => kind switch

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Windows;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -73,11 +74,14 @@ public sealed partial class ShellViewModel : ObservableObject
         });
         try
         {
+            if (Workspace != null) Workspace.Changed -= OnWorkspaceChanged;
             Workspace = await Task.Run(() => ModWorkspace.OpenAsync(options, progress));
+            Workspace.Changed += OnWorkspaceChanged;
             Search.Reset();
             BuildNavItems();
             if (otherMod)
             {
+                foreach (var tab in Tabs) tab.Navigation.DetachAll();
                 Tabs.Clear();
                 History.Clear();
             }
@@ -96,7 +100,93 @@ public sealed partial class ShellViewModel : ObservableObject
         }
     }
 
-    public Task ReloadAsync() => _options is null ? Task.CompletedTask : OpenAsync(_options);
+    public async Task ReloadAsync()
+    {
+        if (_options is null || !await ResolveUnsavedChangesAsync("reloading")) return;
+        await OpenAsync(_options);
+    }
+
+    /// <summary>
+    /// Asks what to do with unsaved changes before <paramref name="action"/> (e.g. "closing").
+    /// Returns false if the user cancelled or a save failed.
+    /// </summary>
+    public async Task<bool> ResolveUnsavedChangesAsync(string action)
+    {
+        var dirty = Workspace?.DirtySessions.ToList() ?? [];
+        if (dirty.Count == 0) return true;
+        string names = string.Join("\n", dirty.Take(10).Select(s => "  " + s.EntityName)) + (dirty.Count > 10 ? $"\n  … and {dirty.Count - 10} more" : "");
+        var answer = MessageBox.Show(
+            $"{dirty.Count} entities have unsaved changes:\n\n{names}\n\nSave them before {action}?",
+            "Unsaved changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Warning);
+        if (answer == MessageBoxResult.Cancel) return false;
+        if (answer == MessageBoxResult.No) return true;
+        return await SaveSessionsAsync(dirty);
+    }
+
+    private async Task<bool> SaveSessionsAsync(IReadOnlyList<Core.Editing.EntityEditSession> sessions)
+    {
+        foreach (var session in sessions)
+        {
+            try
+            {
+                await Workspace!.SaveAsync(session, session.Format ?? Workspace.DefaultSaveFormat(session.Original));
+            }
+            catch (Exception e) when (e is IOException or UnauthorizedAccessException or Core.Conversion.ConvertDataException)
+            {
+                MessageBox.Show($"Couldn't save {session.EntityName}: {e.Message}", "Save failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>The entity editor in the current tab: an entity page, or the item shown on a race page.</summary>
+    private EntityViewModel? CurrentEditor => CurrentPage switch
+    {
+        EntityViewModel e => e,
+        RaceViewModel r => r.Detail,
+        _ => null,
+    };
+
+    [RelayCommand]
+    private async Task SaveCurrentAsync()
+    {
+        if (CurrentEditor is { } editor) await editor.SaveAsync();
+    }
+
+    [RelayCommand]
+    private async Task SaveAllAsync()
+    {
+        CurrentEditor?.FlushRawText?.Invoke();
+        if (Workspace != null) await SaveSessionsAsync(Workspace.DirtySessions.ToList());
+    }
+
+    [RelayCommand]
+    private void UndoCurrent()
+    {
+        if (CurrentEditor is { CanUndo: true } editor) editor.Undo();
+    }
+
+    [RelayCommand]
+    private void RedoCurrent()
+    {
+        if (CurrentEditor is { CanRedo: true } editor) editor.Redo();
+    }
+
+    /// <summary>
+    /// After a save: counts and problems changed. Rebuild the sidebar and every page except the editors on screen,
+    /// which refresh themselves and must keep their state.
+    /// </summary>
+    private void OnWorkspaceChanged()
+    {
+        BuildNavItems();
+        foreach (var tab in Tabs)
+        {
+            tab.Navigation.InvalidateOtherPages();
+            if (tab.Page is not (EntityViewModel or RaceViewModel)) tab.Navigation.RecreateCurrentPage();
+        }
+        UpdateNavSelection();
+    }
 
     /// <summary>Navigates the current tab, or opens a new tab when Ctrl is held.</summary>
     public void Navigate(NavTarget target)
@@ -147,6 +237,7 @@ public sealed partial class ShellViewModel : ObservableObject
         if (tab is null || Tabs.Count <= 1) return;
         int index = Tabs.IndexOf(tab);
         tab.Navigation.PropertyChanged -= OnTabNavigationChanged;
+        tab.Navigation.DetachAll();
         Tabs.Remove(tab);
         if (SelectedTab == tab) SelectedTab = Tabs[Math.Min(index, Tabs.Count - 1)];
         CloseTabCommand.NotifyCanExecuteChanged();

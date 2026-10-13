@@ -280,32 +280,60 @@ public sealed class ModIndex
         }
     }
 
-    private void CollectReferences()
+    /// <summary>
+    /// Replaces an entity after it was edited and saved: its references, the problems they cause and race ownership
+    /// are recomputed. Which keys count as references stays as inferred when the index was built.
+    /// </summary>
+    public void UpdateEntity(EntityRecord updated)
     {
-        foreach (var entity in ActiveEntities)
+        if (_entities.TryGetValue(updated.Name, out var old))
         {
-            var outgoing = new List<Reference>();
-            var lines = entity.Document.Lines;
-            var parents = entity.Document.GetParentIndices();
-            for (int i = 0; i < lines.Count; i++)
+            if (_outgoing.Remove(old, out var oldRefs))
             {
-                string context = Context(lines, parents, i);
-                if (!_referenceKeys.TryGetValue(context, out var kind)) continue;
-                if (!SinsValue.TryGetString(lines[i].Value, out var target) || target.Length == 0) continue;
-                var reference = new Reference(entity, i, lines[i].Key, context, kind, target, Exists(kind, target));
-                outgoing.Add(reference);
-                _references.Add(reference);
-                if (!_incoming.TryGetValue((kind, target), out var list)) _incoming[(kind, target)] = list = [];
-                list.Add(reference);
-                if (!reference.Resolved)
+                var removed = oldRefs.ToHashSet();
+                _references.RemoveAll(removed.Contains);
+                foreach (var r in oldRefs)
                 {
-                    _problems.Add(new Problem(ProblemSeverity.Error, ProblemCodes.MissingReference,
-                        $"{entity.Name}: {lines[i].Key} points to {kind.ToString().ToLowerInvariant()} '{target}', which doesn't exist.",
-                        entity.File.RelativePath, i));
+                    if (_incoming.TryGetValue((r.Kind, r.Target), out var list)) list.RemoveAll(removed.Contains);
                 }
             }
-            _outgoing[entity] = outgoing;
+            _problems.RemoveAll(p => p.Code == ProblemCodes.MissingReference
+                && string.Equals(p.RelativePath, old.File.RelativePath, StringComparison.OrdinalIgnoreCase));
         }
+        _entities[updated.Name] = updated;
+        if (updated.InManifest) CollectReferences(updated);
+        _raceItems.Clear();
+        CollectRaceItems();
+    }
+
+    private void CollectReferences()
+    {
+        foreach (var entity in ActiveEntities) CollectReferences(entity);
+    }
+
+    private void CollectReferences(EntityRecord entity)
+    {
+        var outgoing = new List<Reference>();
+        var lines = entity.Document.Lines;
+        var parents = entity.Document.GetParentIndices();
+        for (int i = 0; i < lines.Count; i++)
+        {
+            string context = Context(lines, parents, i);
+            if (!_referenceKeys.TryGetValue(context, out var kind)) continue;
+            if (!SinsValue.TryGetString(lines[i].Value, out var target) || target.Length == 0) continue;
+            var reference = new Reference(entity, i, lines[i].Key, context, kind, target, Exists(kind, target));
+            outgoing.Add(reference);
+            _references.Add(reference);
+            if (!_incoming.TryGetValue((kind, target), out var list)) _incoming[(kind, target)] = list = [];
+            list.Add(reference);
+            if (!reference.Resolved)
+            {
+                _problems.Add(new Problem(ProblemSeverity.Error, ProblemCodes.MissingReference,
+                    $"{entity.Name}: {lines[i].Key} points to {kind.ToString().ToLowerInvariant()} '{target}', which doesn't exist.",
+                    entity.File.RelativePath, i));
+            }
+        }
+        _outgoing[entity] = outgoing;
     }
 
     private void CollectRaceItems()

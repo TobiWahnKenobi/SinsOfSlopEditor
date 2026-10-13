@@ -17,15 +17,31 @@ public sealed partial class DocumentTab : ObservableObject
         Navigation.PropertyChanged += OnNavigationChanged;
     }
 
+    private PageViewModel? _observedPage;
+
     public NavigationService Navigation { get; }
     public PageViewModel? Page => Navigation.CurrentPage;
     public string Title => Page?.Title ?? "…";
+    public bool IsDirty => Page?.IsDirty ?? false;
 
     private void OnNavigationChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(NavigationService.CurrentPage) or nameof(NavigationService.Current))
         {
+            if (_observedPage != null) _observedPage.PropertyChanged -= OnPageChanged;
+            _observedPage = Page;
+            if (_observedPage != null) _observedPage.PropertyChanged += OnPageChanged;
             OnPropertyChanged(nameof(Page));
+            OnPropertyChanged(nameof(Title));
+            OnPropertyChanged(nameof(IsDirty));
+        }
+    }
+
+    private void OnPageChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(PageViewModel.IsDirty) or nameof(PageViewModel.Title))
+        {
+            OnPropertyChanged(nameof(IsDirty));
             OnPropertyChanged(nameof(Title));
         }
     }

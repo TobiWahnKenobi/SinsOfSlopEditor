@@ -6,6 +6,7 @@
     <conv:NullToCollapsedConverter x:Key="NullToCollapsed" />
     <conv:NotNullConverter x:Key="NotNull" />
     <conv:ZeroToVisibleConverter x:Key="ZeroToVisible" />
+    <conv:DepthToMarginConverter x:Key="DepthToMargin" />
 
     <!-- Section heading inside a page. -->
     <Style x:Key="SectionHeader" TargetType="TextBlock">

@@ -9,4 +9,10 @@ public abstract class PageViewModel : ObservableObject
 
     /// <summary>Path shown above the page, e.g. "Frigates".</summary>
     public virtual string? Breadcrumb => null;
+
+    /// <summary>Whether the page shows unsaved changes (marks its tab).</summary>
+    public virtual bool IsDirty => false;
+
+    /// <summary>Called when the page is discarded, to stop listening to shared objects.</summary>
+    public virtual void Detach() { }
 }

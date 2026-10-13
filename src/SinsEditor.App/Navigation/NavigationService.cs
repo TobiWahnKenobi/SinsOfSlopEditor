@@ -70,12 +70,33 @@ public sealed partial class NavigationService(ObservableCollection<HistoryEntry>
     /// <summary>After the mod was reloaded: rebuild the current page now and the others when they're shown again.</summary>
     public void InvalidatePages()
     {
-        foreach (var entry in _back.Concat(_forward)) entry.Page = null;
-        if (Current is { } current)
+        InvalidateOtherPages();
+        RecreateCurrentPage();
+    }
+
+    /// <summary>Drops the pages in the back and forward stacks; they're rebuilt when shown again.</summary>
+    public void InvalidateOtherPages()
+    {
+        foreach (var entry in _back.Concat(_forward))
         {
-            current.Page = createPage(current.Target);
-            OnPropertyChanged(nameof(CurrentPage));
+            entry.Page?.Detach();
+            entry.Page = null;
         }
+    }
+
+    public void RecreateCurrentPage()
+    {
+        if (Current is not { } current) return;
+        current.Page?.Detach();
+        current.Page = createPage(current.Target);
+        OnPropertyChanged(nameof(CurrentPage));
+    }
+
+    /// <summary>Detaches every page, e.g. when the tab is closed.</summary>
+    public void DetachAll()
+    {
+        foreach (var entry in _back.Concat(_forward).Append(Current))
+            entry?.Page?.Detach();
     }
 
     private void MoveTo(NavEntry entry)

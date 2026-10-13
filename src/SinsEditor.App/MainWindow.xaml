@@ -20,6 +20,10 @@
         <KeyBinding Modifiers="Ctrl" Key="K" Command="{Binding Search.OpenCommand}" />
         <KeyBinding Modifiers="Ctrl" Key="T" Command="{Binding NewTabCommand}" />
         <KeyBinding Modifiers="Ctrl" Key="W" Command="{Binding CloseTabCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="S" Command="{Binding SaveCurrentCommand}" />
+        <KeyBinding Modifiers="Ctrl+Shift" Key="S" Command="{Binding SaveAllCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="Z" Command="{Binding UndoCurrentCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="Y" Command="{Binding RedoCurrentCommand}" />
     </Window.InputBindings>
 
     <Grid>
@@ -60,6 +64,8 @@
                 </Popup>
             </Grid>
             <Button DockPanel.Dock="Right" Style="{StaticResource ToolbarButton}" Content="Open mod…" Click="OpenMod_Click" />
+            <Button DockPanel.Dock="Right" Style="{StaticResource ToolbarButton}" Content="Save all" Command="{Binding SaveAllCommand}"
+                    ToolTip="Save every entity with unsaved changes (Ctrl+Shift+S)" />
             <Button DockPanel.Dock="Right" Style="{StaticResource ToolbarButton}" Content="Reload" Click="Reload_Click"
                     ToolTip="Read the mod's files again" />
             <Button DockPanel.Dock="Right" Command="{Binding Search.OpenCommand}" Margin="0,0,12,0" Padding="10,4" Width="260"
@@ -150,6 +156,8 @@
                                         </Border.Style>
                                         <StackPanel Orientation="Horizontal">
                                             <TextBlock Text="{Binding Title}" MaxWidth="220" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <TextBlock Text=" ●" VerticalAlignment="Center" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                                       ToolTip="Unsaved changes" Visibility="{Binding IsDirty, Converter={StaticResource BoolToVisibility}}" />
                                             <Button Content="&#xE711;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10"
                                                     Padding="4" MinWidth="0" MinHeight="0" Margin="8,0,0,0" BorderThickness="0" Background="Transparent"
                                                     Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"

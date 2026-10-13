@@ -112,8 +112,26 @@ public sealed partial class RaceViewModel : PageViewModel
 
     partial void OnSelectedNodeChanged(RaceTreeNode? value)
     {
+        Detail?.Detach();
         Detail = value?.Entity is { } entity ? new EntityViewModel(_workspace, entity, _navigate) : null;
     }
+
+    partial void OnDetailChanged(EntityViewModel? oldValue, EntityViewModel? newValue)
+    {
+        if (oldValue != null) oldValue.PropertyChanged -= OnDetailPropertyChanged;
+        if (newValue != null) newValue.PropertyChanged += OnDetailPropertyChanged;
+        OnPropertyChanged(nameof(IsDirty));
+    }
+
+    private void OnDetailPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(IsDirty)) OnPropertyChanged(nameof(IsDirty));
+    }
+
+    /// <summary>Unsaved changes in the item shown on the right.</summary>
+    public override bool IsDirty => Detail?.IsDirty ?? false;
+
+    public override void Detach() => Detail?.Detach();
 
     [RelayCommand]
     private void Open(RaceTreeNode? node)

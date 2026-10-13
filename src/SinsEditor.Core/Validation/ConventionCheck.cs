@@ -23,12 +23,16 @@ public static class ConventionCheck
 
             // Scans bytes instead of parsing: text meshes in a mod can have millions of lines.
             var scan = Scan(bytes);
-            var expected = TextConventions.Resolve(relative, GameEncoding(stack, relative), scan.HasNonAscii);
+            var expected = ExpectedConvention(stack, relative, scan.HasNonAscii);
             string? reason = Describe(scan, expected);
             if (reason != null) result.Add(new ConventionMismatch(relative, absolute, expected, reason));
         }
         return result;
     }
+
+    /// <summary>Encoding and line endings a file in the edited mod should have, following the base game's version of it.</summary>
+    public static TextConvention ExpectedConvention(LayerStack stack, string relativePath, bool hasNonAsciiText) =>
+        TextConventions.Resolve(relativePath, GameEncoding(stack, relativePath), hasNonAsciiText);
 
     /// <summary>Rewrites the files with the expected encoding and line endings. Returns how many were changed.</summary>
     public static int Fix(IEnumerable<ConventionMismatch> mismatches)
