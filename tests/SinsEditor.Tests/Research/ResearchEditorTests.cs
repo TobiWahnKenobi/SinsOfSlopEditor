@@ -130,6 +130,21 @@ public sealed class ResearchEditorTests : IAsyncLifetime
     }
 
     [SkippableFact]
+    public void Pacts_artifacts_and_unlocks_are_never_offered()
+    {
+        var vm = Editor();
+        vm.IncludeOtherRaces = true;
+        vm.IncludeBaseGame = true;
+
+        var fields = vm.Unassigned
+            .Select(r => Core.Index.Facets.TopLevelValues(_workspace!.Index.Entities[r.Name], "ResearchField").FirstOrDefault())
+            .Distinct().ToList();
+
+        Assert.All(fields, f => Assert.True(ResearchTree.IsTreeField(f), $"{f} offered"));
+        Assert.DoesNotContain(vm.FieldTabs, t => t.Field == "Artifact");
+    }
+
+    [SkippableFact]
     public void Dropping_an_unassigned_subject_adds_and_places_it()
     {
         var vm = Editor();

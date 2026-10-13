@@ -73,6 +73,15 @@ public sealed class ResearchTree
 {
     public static readonly IReadOnlyList<string> Fields = ["Combat", "Defense", "NonCombat", "Diplomacy", "Fleet", "Artifact"];
 
+    /// <summary>
+    /// Fields a race places subjects in. Other fields are handled by the game itself: in the base game no race lists
+    /// a PactBonus subject (22, unlocked through diplomacy pacts via <c>pactUnlockEntityDefName</c>), an Artifact
+    /// subject (12, found on planets) or a ResearchUnlock subject (4).
+    /// </summary>
+    public static readonly IReadOnlyList<string> TreeFields = ["Combat", "Defense", "NonCombat", "Diplomacy", "Fleet"];
+
+    public static bool IsTreeField(string? field) => field != null && TreeFields.Contains(field);
+
     /// <summary>Names the game's research window shows for the fields.</summary>
     public static string FieldTitle(string field) => field switch
     {

@@ -232,7 +232,8 @@ public sealed partial class ResearchViewModel : PageViewModel
         OnPropertyChanged(nameof(ContentBackdrop));
 
         FieldTabs.Clear();
-        foreach (string field in ResearchTree.Fields.Where(f => tree.BlocksOf(f).Any() || tree.Subjects.Any(s => s.Field == f)))
+        // Artifacts only get a tab if the race actually lists some (base-game races never do).
+        foreach (string field in ResearchTree.Fields.Where(f => tree.Subjects.Any(s => s.Field == f) || (ResearchTree.IsTreeField(f) && tree.BlocksOf(f).Any())))
         {
             var subjectsInField = tree.Subjects.Where(s => s.Field == field).Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
             FieldTabs.Add(new FieldTab(field, ResearchTree.FieldTitle(field), FieldIcon(field),
@@ -315,6 +316,8 @@ public sealed partial class ResearchViewModel : PageViewModel
 
         var others = index.ActiveEntities
             .Where(e => e.EntityType == "ResearchSubject" && !onTree.Contains(e.Name))
+            // Pact bonuses, artifacts and research unlocks are given by the game, never placed on a tree.
+            .Where(e => ResearchTree.IsTreeField(Facets.TopLevelValues(e with { Document = _workspace.SessionFor(e).Document }, "ResearchField").FirstOrDefault()))
             .Where(e => IncludeBaseGame || e.File.Layer.Kind != Core.FileSystem.LayerKind.BaseGame)
             .Select(e => (Entity: e, Owners: index.RacesOwning(e.Name).Where(r => r.Name != Race.Name).ToList()))
             .Where(x => IncludeOtherRaces || x.Owners.Count == 0)
