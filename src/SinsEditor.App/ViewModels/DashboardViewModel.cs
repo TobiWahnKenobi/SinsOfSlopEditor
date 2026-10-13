@@ -154,14 +154,14 @@ public sealed partial class DashboardViewModel : PageViewModel
             "Fix values", MessageBoxButton.OKCancel, MessageBoxImage.Question);
         if (answer != MessageBoxResult.OK) return;
 
-        var (done, skipped) = await ValueFixes.FixAllAsync(_workspace);
+        var (done, skipped) = await Services.Busy.Current.RunAsync($"Fixing values in {entities:N0} entities…", p => ValueFixes.FixAllAsync(_workspace, p));
         MessageBox.Show($"Fixed {done:N0} values." + (skipped > 0 ? $" {skipped} entities with unsaved edits were skipped." : ""), "Fix values");
         await _reload();
     }
 
     private async Task ImportMissingStringsAsync()
     {
-        var importable = await Task.Run(() => StringFixes.FindImportable(_workspace));
+        var importable = await Services.Busy.Current.RunInBackground("Looking for the missing strings in the lower layers…", _ => StringFixes.FindImportable(_workspace));
         int missing = _workspace.Problems.Where(p => p.Code == ProblemCodes.MissingString).Select(p => p.Message).Distinct().Count();
         if (importable.Count == 0)
         {
@@ -177,7 +177,7 @@ public sealed partial class DashboardViewModel : PageViewModel
             "Import missing strings", MessageBoxButton.OKCancel, MessageBoxImage.Question);
         if (answer != MessageBoxResult.OK) return;
 
-        int added = await Task.Run(() => StringFixes.ImportStrings(_workspace, importable));
+        int added = await Services.Busy.Current.RunInBackground($"Importing {importable.Count:N0} strings…", _ => StringFixes.ImportStrings(_workspace, importable));
         MessageBox.Show($"Imported {importable.Count:N0} strings ({added:N0} entries including variants).", "Import missing strings");
         await _reload();
     }
@@ -192,7 +192,7 @@ public sealed partial class DashboardViewModel : PageViewModel
             "Remove duplicate strings", MessageBoxButton.OKCancel, MessageBoxImage.Question);
         if (answer != MessageBoxResult.OK) return;
 
-        int removed = await Task.Run(() => StringFixes.RemoveIdenticalCopies(_workspace));
+        int removed = await Services.Busy.Current.RunInBackground("Removing duplicate strings…", _ => StringFixes.RemoveIdenticalCopies(_workspace));
         MessageBox.Show($"Removed {removed} entries.", "Remove duplicate strings");
         await _reload();
     }
@@ -206,7 +206,7 @@ public sealed partial class DashboardViewModel : PageViewModel
             "Fix encoding and line endings", MessageBoxButton.OKCancel, MessageBoxImage.Question);
         if (answer != MessageBoxResult.OK) return;
 
-        int count = await Task.Run(() => ConventionCheck.Fix(mismatches));
+        int count = await Services.Busy.Current.RunInBackground($"Converting {mismatches.Count:N0} files…", p => ConventionCheck.Fix(mismatches, p));
         MessageBox.Show($"Converted {count} files.", "Fix encoding and line endings");
         await _reload();
     }

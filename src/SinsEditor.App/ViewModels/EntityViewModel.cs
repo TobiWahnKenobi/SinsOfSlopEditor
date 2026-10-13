@@ -154,7 +154,7 @@ public sealed partial class EntityViewModel : PageViewModel
         StatusMessage = null;
         try
         {
-            await _workspace.SaveAsync(Session, SelectedFormat);
+            await Services.Busy.Current.RunAsync($"Saving {Entity.Name}…", _ => _workspace.SaveAsync(Session, SelectedFormat));
             StatusMessage = $"Saved to {_workspace.ModName}/{Entity.File.RelativePath}";
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or Core.Conversion.ConvertDataException)

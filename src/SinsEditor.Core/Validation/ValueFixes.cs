@@ -43,11 +43,13 @@ public static partial class ValueFixes
     /// Applies every fixable value through the entities' edit sessions and saves them in their current format.
     /// Entities with unsaved edits are left alone. Returns (fixed values, skipped entities).
     /// </summary>
-    public static async Task<(int Fixed, int Skipped)> FixAllAsync(ModWorkspace workspace, CancellationToken ct = default)
+    public static async Task<(int Fixed, int Skipped)> FixAllAsync(ModWorkspace workspace, IProgress<double>? progress = null, CancellationToken ct = default)
     {
-        int done = 0, skipped = 0;
-        foreach (var group in Fixable(workspace).GroupBy(f => f.Entity, StringComparer.OrdinalIgnoreCase))
+        int done = 0, skipped = 0, entities = 0;
+        var groups = Fixable(workspace).GroupBy(f => f.Entity, StringComparer.OrdinalIgnoreCase).ToList();
+        foreach (var group in groups)
         {
+            progress?.Report((double)entities++ / groups.Count);
             if (workspace.ExistingSession(group.Key) is { IsDirty: true })
             {
                 skipped++;

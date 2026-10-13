@@ -330,7 +330,8 @@ public sealed partial class BrushEditorViewModel : PageViewModel
         if (_plan is null) return;
         try
         {
-            _plan.Changes.Apply(_workspace);
+            var changes = _plan.Changes;
+            await Services.Busy.Current.RunInBackground("Writing the brush and its textures…", _ => { changes.Apply(_workspace); return true; });
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {

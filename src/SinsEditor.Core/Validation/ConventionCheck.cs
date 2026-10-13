@@ -35,11 +35,13 @@ public static class ConventionCheck
         TextConventions.Resolve(relativePath, GameEncoding(stack, relativePath), hasNonAsciiText);
 
     /// <summary>Rewrites the files with the expected encoding and line endings. Returns how many were changed.</summary>
-    public static int Fix(IEnumerable<ConventionMismatch> mismatches)
+    public static int Fix(IEnumerable<ConventionMismatch> mismatches, IProgress<double>? progress = null)
     {
-        int fixedCount = 0;
-        foreach (var m in mismatches)
+        var list = mismatches.ToList();
+        int fixedCount = 0, done = 0;
+        foreach (var m in list)
         {
+            progress?.Report((double)done++ / list.Count);
             var doc = SinsDocument.Load(m.AbsolutePath);
             if (doc.ApplyConvention(m.Expected))
             {

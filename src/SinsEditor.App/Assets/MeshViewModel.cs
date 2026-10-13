@@ -146,7 +146,7 @@ public sealed partial class MeshViewModel : PageViewModel
         IsScaling = true;
         try
         {
-            await MeshScaler.ScaleAsync(_workspace, Name, factor, target);
+            await Services.Busy.Current.RunAsync($"Scaling {Name} by {factor:0.###}…", _ => MeshScaler.ScaleAsync(_workspace, Name, factor, target));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or Core.Conversion.ConvertDataException or InvalidOperationException)
         {

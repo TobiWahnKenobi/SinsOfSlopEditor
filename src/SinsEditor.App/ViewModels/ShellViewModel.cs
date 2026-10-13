@@ -74,7 +74,7 @@ public sealed partial class ShellViewModel : ObservableObject
 
         try
         {
-            plan.Apply(Workspace);
+            await Services.Busy.Current.RunInBackground($"{dialog.Title}…", _ => { plan.Apply(Workspace); return true; });
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException)
         {
@@ -159,22 +159,25 @@ public sealed partial class ShellViewModel : ObservableObject
         return await SaveSessionsAsync(dirty);
     }
 
-    private async Task<bool> SaveSessionsAsync(IReadOnlyList<Core.Editing.EntityEditSession> sessions)
-    {
-        foreach (var session in sessions)
+    private Task<bool> SaveSessionsAsync(IReadOnlyList<Core.Editing.EntityEditSession> sessions) =>
+        Services.Busy.Current.RunAsync(sessions.Count == 1 ? $"Saving {sessions[0].EntityName}…" : $"Saving {sessions.Count} entities…", async progress =>
         {
-            try
+            for (int i = 0; i < sessions.Count; i++)
             {
-                await Workspace!.SaveAsync(session, session.Format ?? Workspace.DefaultSaveFormat(session.Original));
+                if (sessions.Count > 1) progress.Report((double)i / sessions.Count);
+                var session = sessions[i];
+                try
+                {
+                    await Workspace!.SaveAsync(session, session.Format ?? Workspace.DefaultSaveFormat(session.Original));
+                }
+                catch (Exception e) when (e is IOException or UnauthorizedAccessException or Core.Conversion.ConvertDataException)
+                {
+                    MessageBox.Show($"Couldn't save {session.EntityName}: {e.Message}", "Save failed", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return false;
+                }
             }
-            catch (Exception e) when (e is IOException or UnauthorizedAccessException or Core.Conversion.ConvertDataException)
-            {
-                MessageBox.Show($"Couldn't save {session.EntityName}: {e.Message}", "Save failed", MessageBoxButton.OK, MessageBoxImage.Error);
-                return false;
-            }
-        }
-        return true;
-    }
+            return true;
+        });
 
     /// <summary>The entity editor in the current tab: an entity page, or the item shown on a race page.</summary>
     private EntityViewModel? CurrentEditor => CurrentPage switch

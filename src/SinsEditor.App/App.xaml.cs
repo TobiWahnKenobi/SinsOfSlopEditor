@@ -70,6 +70,11 @@ public partial class App : Application
             shell.LoadingProgress = 0.34;
             shell.IsLoading = true;
         }
+        if (args.BusyPreview)
+        {
+            // Shows the progress overlay at 40 % for the screenshot.
+            _ = Services.Busy.Current.RunAsync("Converting 1,838 files…", async p => { p.Report(0.4); await Task.Delay(10000); });
+        }
         if (args.Screenshot is { } file)
         {
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
@@ -115,6 +120,7 @@ public partial class App : Application
         {
             ShowFirstProblem = args.Contains("--show-first-problem");
             LoadingPreview = args.Contains("--loading-preview");
+            BusyPreview = args.Contains("--busy-preview");
             ResearchNames = args.Contains("--research-names");
             for (int i = 0; i < args.Length - 1; i++)
             {
@@ -141,6 +147,7 @@ public partial class App : Application
         public string? Search { get; }
         public bool ShowFirstProblem { get; }
         public bool LoadingPreview { get; }
+        public bool BusyPreview { get; }
         public bool ResearchNames { get; }
 
         private static NavTarget ParseTarget(string value)
