@@ -11,11 +11,15 @@
         <DataTemplate DataType="{x:Type vm:DashboardViewModel}"><views:DashboardView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:CategoryViewModel}"><views:CategoryView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:EntityViewModel}"><views:EntityView /></DataTemplate>
+        <DataTemplate DataType="{x:Type vm:RaceViewModel}"><views:RaceView /></DataTemplate>
         <DataTemplate DataType="{x:Type vm:ProblemsViewModel}"><views:ProblemsView /></DataTemplate>
     </Window.Resources>
     <Window.InputBindings>
         <KeyBinding Modifiers="Alt" Key="Left" Command="{Binding GoBackCommand}" />
         <KeyBinding Modifiers="Alt" Key="Right" Command="{Binding GoForwardCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="K" Command="{Binding Search.OpenCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="T" Command="{Binding NewTabCommand}" />
+        <KeyBinding Modifiers="Ctrl" Key="W" Command="{Binding CloseTabCommand}" />
     </Window.InputBindings>
 
     <Grid>
@@ -35,12 +39,13 @@
                               Content="&#xE81C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
                 <Popup IsOpen="{Binding IsChecked, ElementName=HistoryToggle}" StaysOpen="False"
                        PlacementTarget="{Binding ElementName=HistoryToggle}" Placement="Bottom" AllowsTransparency="True">
-                    <Border Style="{StaticResource Card}" Padding="4" Width="380" MaxHeight="480"
+                    <Border Style="{StaticResource Card}" Padding="4" Width="420" MaxHeight="480"
                             Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
                         <DockPanel>
                             <TextBlock DockPanel.Dock="Top" Text="History" FontWeight="SemiBold" Margin="8,6" />
-                            <ListBox ItemsSource="{Binding Navigation.History}" BorderThickness="0"
-                                     x:Name="HistoryList" MouseUp="HistoryList_MouseUp">
+                            <TextBlock DockPanel.Dock="Top" Text="Pages you open appear here." Style="{StaticResource Muted}" Margin="8,0,8,8"
+                                       Visibility="{Binding History.Count, Converter={StaticResource ZeroToVisible}}" />
+                            <ListBox ItemsSource="{Binding History}" BorderThickness="0" MouseUp="HistoryList_MouseUp">
                                 <ListBox.ItemTemplate>
                                     <DataTemplate DataType="{x:Type nav:HistoryEntry}">
                                         <DockPanel>
@@ -57,6 +62,16 @@
             <Button DockPanel.Dock="Right" Style="{StaticResource ToolbarButton}" Content="Open mod…" Click="OpenMod_Click" />
             <Button DockPanel.Dock="Right" Style="{StaticResource ToolbarButton}" Content="Reload" Click="Reload_Click"
                     ToolTip="Read the mod's files again" />
+            <Button DockPanel.Dock="Right" Command="{Binding Search.OpenCommand}" Margin="0,0,12,0" Padding="10,4" Width="260"
+                    HorizontalContentAlignment="Left" ToolTip="Search everything (Ctrl+K)">
+                <DockPanel Width="236">
+                    <TextBlock DockPanel.Dock="Right" Text="Ctrl+K" Style="{StaticResource Muted}" />
+                    <TextBlock Style="{StaticResource Muted}">
+                        <Run Text="&#xE721;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" />
+                        <Run Text=" Search" />
+                    </TextBlock>
+                </DockPanel>
+            </Button>
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                 <TextBlock Text="{Binding Workspace.ModName}" Style="{StaticResource Muted}" />
                 <TextBlock Text="  ›  " Style="{StaticResource Muted}"
@@ -77,9 +92,10 @@
             <ItemsControl Grid.Column="0" ItemsSource="{Binding NavItems}" Margin="8,0,4,8">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:NavItem}">
-                        <Button Command="{Binding DataContext.NavigateCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                        <Button Command="{Binding DataContext.NavigateToCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                 CommandParameter="{Binding Target}" HorizontalContentAlignment="Stretch"
-                                HorizontalAlignment="Stretch" Margin="0,1" Padding="10,6" BorderThickness="0">
+                                HorizontalAlignment="Stretch" Margin="0,1" Padding="10,6" BorderThickness="0"
+                                ToolTip="Ctrl+click opens a new tab">
                             <Button.Style>
                                 <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                     <Setter Property="Background" Value="Transparent" />
@@ -110,8 +126,78 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <Border Grid.Column="1" Margin="4,0,12,12" Style="{StaticResource Card}" Padding="0">
-                <ContentControl Content="{Binding CurrentPage}" Focusable="False" />
+            <DockPanel Grid.Column="1" Margin="4,0,12,12">
+                <!-- Tab strip -->
+                <ScrollViewer DockPanel.Dock="Top" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                    <StackPanel Orientation="Horizontal">
+                        <ItemsControl ItemsSource="{Binding Tabs}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate><StackPanel Orientation="Horizontal" /></ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate DataType="{x:Type vm:DocumentTab}">
+                                    <Border x:Name="TabBorder" CornerRadius="6,6,0,0" Padding="12,6,6,6" Margin="0,0,2,0"
+                                            MouseLeftButtonDown="Tab_MouseLeftButtonDown" MouseUp="Tab_MouseUp" Cursor="Hand">
+                                        <Border.Style>
+                                            <Style TargetType="Border">
+                                                <Setter Property="Background" Value="Transparent" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                                        <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Border.Style>
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="{Binding Title}" MaxWidth="220" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                                            <Button Content="&#xE711;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="10"
+                                                    Padding="4" MinWidth="0" MinHeight="0" Margin="8,0,0,0" BorderThickness="0" Background="Transparent"
+                                                    Command="{Binding DataContext.CloseTabCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}" ToolTip="Close tab (Ctrl+W)" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                        <Button Content="&#xE710;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="12" Padding="8,4"
+                                BorderThickness="0" Background="Transparent" Command="{Binding NewTabCommand}" ToolTip="New tab (Ctrl+T)" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <Border Style="{StaticResource Card}" Padding="0" CornerRadius="0,8,8,8">
+                    <ContentControl Content="{Binding CurrentPage}" Focusable="False" />
+                </Border>
+            </DockPanel>
+        </Grid>
+
+        <!-- Global search -->
+        <Grid Grid.RowSpan="2" Background="#33000000" Visibility="{Binding Search.IsOpen, Converter={StaticResource BoolToVisibility}}"
+              MouseDown="SearchOverlay_MouseDown" IsVisibleChanged="SearchOverlay_IsVisibleChanged">
+            <Border Style="{StaticResource Card}" Width="680" VerticalAlignment="Top" Margin="0,70,0,0" Padding="8" MaxHeight="620"
+                    Background="{DynamicResource SolidBackgroundFillColorBaseBrush}" MouseDown="SearchPanel_MouseDown">
+                <DockPanel>
+                    <TextBox x:Name="SearchBox" DockPanel.Dock="Top" Text="{Binding Search.Query, UpdateSourceTrigger=PropertyChanged}"
+                             FontSize="16" PreviewKeyDown="SearchBox_PreviewKeyDown" />
+                    <TextBlock DockPanel.Dock="Top" Text="{Binding Search.Status}" Style="{StaticResource Muted}" Margin="8,8,8,4"
+                               Visibility="{Binding Search.Status, Converter={StaticResource NullToCollapsed}}" />
+                    <TextBlock DockPanel.Dock="Bottom" Text="↑↓ select · Enter open · Ctrl+Enter open in new tab · Esc close"
+                               Style="{StaticResource Muted}" FontSize="12" Margin="8,6,8,0" />
+                    <ListBox x:Name="SearchResults" ItemsSource="{Binding Search.Results}" SelectedItem="{Binding Search.Selected}"
+                             BorderThickness="0" Margin="0,6,0,0" MouseUp="SearchResults_MouseUp"
+                             VirtualizingPanel.IsVirtualizing="True" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <ListBox.ItemTemplate>
+                            <DataTemplate DataType="{x:Type vm:SearchResult}">
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Group}" FontWeight="SemiBold" FontSize="12" Margin="0,6,0,2"
+                                               Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                                               Visibility="{Binding IsFirstInGroup, Converter={StaticResource BoolToVisibility}}" />
+                                    <TextBlock Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+                                    <TextBlock Text="{Binding Detail}" Style="{StaticResource Muted}" FontSize="12" TextTrimming="CharacterEllipsis" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+                </DockPanel>
             </Border>
         </Grid>
 

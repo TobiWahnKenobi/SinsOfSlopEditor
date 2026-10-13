@@ -32,6 +32,16 @@ public sealed class ModWorkspace
 
     public string ModName => Path.GetFileName(Options.EditedModPath);
 
+    private ILookup<string, Problem>? _problemsByFile;
+
+    /// <summary>Warnings and errors located in a file (relative path, case-insensitive).</summary>
+    public IEnumerable<Problem> ProblemsIn(string relativePath) =>
+        (_problemsByFile ??= Problems
+            .Where(p => p.RelativePath != null && p.Severity != ProblemSeverity.Info)
+            .ToLookup(p => p.RelativePath!, StringComparer.OrdinalIgnoreCase))[relativePath];
+
+    public bool HasProblems(EntityRecord entity) => ProblemsIn(entity.File.RelativePath).Any();
+
     /// <summary>Warnings and errors, counting each file with wrong encoding or line endings separately.</summary>
     public int ProblemCount =>
         Problems.Count(p => p.Severity != ProblemSeverity.Info && p.Code != ProblemCodes.ConventionMismatch) + ConventionMismatches.Count;

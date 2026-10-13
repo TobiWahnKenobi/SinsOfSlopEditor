@@ -101,6 +101,28 @@ public class ModIndexCorpusTests(TestModIndexFixture fixture, ITestOutputHelper 
     }
 
     [SkippableFact]
+    public void Finds_property_facets_for_frigates_and_research()
+    {
+        var frigates = Index.EntitiesIn(EntityCategories.Frigates).ToList();
+        var research = Index.EntitiesIn(EntityCategories.Research).ToList();
+
+        var frigateFacets = Facets.FindPropertyFacets(Index, frigates).ToList();
+        var researchFacets = Facets.FindPropertyFacets(Index, research).ToList();
+        output.WriteLine("frigates: " + string.Join(", ", frigateFacets));
+        output.WriteLine("research: " + string.Join(", ", researchFacets));
+
+        Assert.Contains("frigateRoleType", frigateFacets.Take(4));
+        Assert.Contains("armorType", frigateFacets.Take(4));
+        var shadowScout = Index.Entities["Frigate_Shadow_Scout"];
+        Assert.True(Facets.TopLevelValues(shadowScout, "frigateRoleType").Count > 1);
+        Assert.Contains("armorType", frigateFacets);
+        Assert.DoesNotContain("hudIcon", frigateFacets);
+        Assert.DoesNotContain("NumWeapons", frigateFacets);
+        Assert.Equal(["ResearchField", "Tier"], researchFacets.Take(2));
+        Assert.Equal("Frigate role type", Facets.Humanize("frigateRoleType"));
+    }
+
+    [SkippableFact]
     public void Display_names_come_from_the_string_table()
     {
         Assert.Equal("Centauri Republic", Index.DisplayName(Index.Entities["PlayerCentauri"]));

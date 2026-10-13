@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using SinsEditor.App.ViewModels;
 
 namespace SinsEditor.App.Navigation;
 
@@ -19,40 +20,37 @@ public sealed record HistoryEntry(NavTarget Target, string Title, DateTime Visit
     public string TimeText => VisitedAt.ToString("HH:mm:ss");
 }
 
-/// <summary>Browser-style back/forward stacks plus a chronological history of every page shown.</summary>
-public sealed partial class NavigationService : ObservableObject
+/// <summary>A visited page. The page object is kept so going back restores its state (filters, search, selection).</summary>
+public sealed class NavEntry(NavTarget target)
 {
-    private readonly Stack<NavTarget> _back = new();
-    private readonly Stack<NavTarget> _forward = new();
+    public NavTarget Target { get; } = target;
+    public PageViewModel? Page { get; set; }
+}
+
+/// <summary>
+/// Browser-style back/forward stacks for one tab. Every page shown is also added to a history shared by all tabs.
+/// </summary>
+public sealed partial class NavigationService(ObservableCollection<HistoryEntry> history, Func<NavTarget, PageViewModel?> createPage)
+    : ObservableObject
+{
+    private readonly Stack<NavEntry> _back = new();
+    private readonly Stack<NavEntry> _forward = new();
 
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanGoBack), nameof(CanGoForward))]
-    private NavTarget? _current;
+    [NotifyPropertyChangedFor(nameof(CanGoBack), nameof(CanGoForward), nameof(CurrentTarget), nameof(CurrentPage))]
+    private NavEntry? _current;
 
-    /// <summary>Newest first.</summary>
-    public ObservableCollection<HistoryEntry> History { get; } = [];
-
+    public NavTarget? CurrentTarget => Current?.Target;
+    public PageViewModel? CurrentPage => Current?.Page;
     public bool CanGoBack => _back.Count > 0;
     public bool CanGoForward => _forward.Count > 0;
 
-    /// <summary>Raised after <see cref="Current"/> changed; the handler shows the page and returns its title for the history.</summary>
-    public Func<NavTarget, string>? Show { get; set; }
-
     public void Navigate(NavTarget target)
     {
-        if (target == Current) return;
+        if (target == CurrentTarget) return;
         if (Current != null) _back.Push(Current);
         _forward.Clear();
-        MoveTo(target);
-    }
-
-    /// <summary>Forgets everything, e.g. when another mod is opened.</summary>
-    public void Reset()
-    {
-        _back.Clear();
-        _forward.Clear();
-        History.Clear();
-        Current = null;
+        MoveTo(new NavEntry(target));
     }
 
     public void GoBack()
@@ -69,11 +67,22 @@ public sealed partial class NavigationService : ObservableObject
         MoveTo(_forward.Pop());
     }
 
-    private void MoveTo(NavTarget target)
+    /// <summary>After the mod was reloaded: rebuild the current page now and the others when they're shown again.</summary>
+    public void InvalidatePages()
     {
-        Current = target;
-        string title = Show?.Invoke(target) ?? target.ToString();
-        History.Insert(0, new HistoryEntry(target, title, DateTime.Now));
-        if (History.Count > 500) History.RemoveAt(History.Count - 1);
+        foreach (var entry in _back.Concat(_forward)) entry.Page = null;
+        if (Current is { } current)
+        {
+            current.Page = createPage(current.Target);
+            OnPropertyChanged(nameof(CurrentPage));
+        }
+    }
+
+    private void MoveTo(NavEntry entry)
+    {
+        entry.Page ??= createPage(entry.Target);
+        Current = entry;
+        history.Insert(0, new HistoryEntry(entry.Target, entry.Page?.Title ?? entry.Target.ToString(), DateTime.Now));
+        if (history.Count > 500) history.RemoveAt(history.Count - 1);
     }
 }

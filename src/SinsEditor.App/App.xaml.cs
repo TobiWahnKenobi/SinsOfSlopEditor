@@ -14,6 +14,7 @@ namespace SinsEditor.App;
 /// Command line (all optional):
 /// <c>--mod &lt;path&gt; [--base &lt;path&gt;]… [--language &lt;name&gt;] [--game &lt;dir&gt;]</c> opens a mod directly;
 /// <c>--target dashboard|category:&lt;id&gt;|entity:&lt;name&gt;|problems[:&lt;code&gt;]</c> picks the first page;
+/// <c>--search &lt;text&gt;</c> opens global search with a query;
 /// <c>--screenshot &lt;file.png&gt;</c> renders that page to a PNG and exits.
 /// </summary>
 public partial class App : Application
@@ -43,7 +44,13 @@ public partial class App : Application
         window.Show();
 
         await shell.OpenAsync(options);
-        if (args.Target is { } target) shell.Navigation.Navigate(target);
+        if (args.Target is { } target) shell.Navigate(target);
+        if (args.Search is { } query)
+        {
+            shell.Search.Open();
+            shell.Search.Query = query;
+            await Task.Delay(800);
+        }
 
         if (args.Screenshot is { } file)
         {
@@ -98,6 +105,7 @@ public partial class App : Application
                     case "--game": Game = value; i++; break;
                     case "--screenshot": Screenshot = value; i++; break;
                     case "--target": Target = ParseTarget(value); i++; break;
+                    case "--search": Search = value; i++; break;
                 }
             }
         }
@@ -108,6 +116,7 @@ public partial class App : Application
         public string? Game { get; }
         public string? Screenshot { get; }
         public NavTarget? Target { get; }
+        public string? Search { get; }
 
         private static NavTarget ParseTarget(string value)
         {
