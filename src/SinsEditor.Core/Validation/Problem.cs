@@ -30,6 +30,12 @@ public static class ProblemCodes
     public const string MissingManifest = "missing-manifest";
     public const string ConventionMismatch = "convention-mismatch";
     public const string BrushImageProblem = "brush-image";
+    public const string CountMismatch = "count-mismatch";
+    public const string UnknownProperty = "unknown-property";
+    public const string WrongValueKind = "wrong-value-kind";
+    public const string ManifestCountMismatch = "manifest-count-mismatch";
+    public const string DuplicateManifestEntry = "duplicate-manifest-entry";
+    public const string UnusedEntity = "unused-entity";
 
     /// <summary>Short title for a group of problems on the dashboard.</summary>
     public static string Title(string code) => code switch
@@ -47,6 +53,12 @@ public static class ProblemCodes
         MissingManifest => "Missing manifest",
         ConventionMismatch => "Encoding or line endings",
         BrushImageProblem => "Brush image outside texture",
+        CountMismatch => "Count doesn't match the list",
+        UnknownProperty => "Unknown property",
+        WrongValueKind => "Value of the wrong kind",
+        ManifestCountMismatch => "Manifest count mismatch",
+        DuplicateManifestEntry => "Manifest entry listed twice",
+        UnusedEntity => "Unused entity",
         _ => code,
     };
 }

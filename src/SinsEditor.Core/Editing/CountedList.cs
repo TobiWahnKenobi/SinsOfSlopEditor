@@ -69,6 +69,22 @@ public sealed record CountedList(int CounterLine, string? ItemKey, IReadOnlyList
         return list?.ItemKey == key ? list : null;
     }
 
+    /// <summary>
+    /// The items right after a counter with key <paramref name="itemKey"/> (none if another key comes first). The game ignores
+    /// indentation, and mods often indent the items under their counter, so they count whether children or siblings.
+    /// </summary>
+    public static IReadOnlyList<ListItem> RunAfter(SinsDocument doc, int[] parents, int line, string itemKey) =>
+        ItemCandidates(doc, parents, line).TakeWhile(s => doc.Lines[s].Key == itemKey).Select(s => new ListItem(s, BlockEnd(doc, s))).ToList();
+
+    /// <summary>The key of the line that would be a counter's first item, if any.</summary>
+    public static string? NextItemKey(SinsDocument doc, int[] parents, int line) =>
+        ItemCandidates(doc, parents, line).Select(s => doc.Lines[s].Key).FirstOrDefault();
+
+    private static IEnumerable<int> ItemCandidates(SinsDocument doc, int[] parents, int line) =>
+        Enumerable.Range(line + 1, doc.Lines.Count - line - 1).FirstOrDefault(i => !doc.Lines[i].IsBlank) is int next and > 0 && parents[next] == line
+            ? Enumerable.Range(line + 1, BlockEnd(doc, line) - line - 1).Where(i => parents[i] == line)
+            : SiblingsAfter(doc, parents, line);
+
     private static IEnumerable<int> SiblingsAfter(SinsDocument doc, int[] parents, int line)
     {
         int parent = parents[line];

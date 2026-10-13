@@ -13,13 +13,14 @@ public sealed record WorkspaceOptions(string GameDirectory, string EditedModPath
 public sealed class ModWorkspace
 {
     private readonly List<Problem> _brushProblems;
+    private readonly Validation.Checks _checks;
     private readonly List<ConventionMismatch> _conventionMismatches;
     private readonly Dictionary<string, EntityEditSession> _sessions = new(StringComparer.OrdinalIgnoreCase);
     private List<Problem> _problems = [];
     private ILookup<string, Problem>? _problemsByFile;
 
     private ModWorkspace(WorkspaceOptions options, LayerStack stack, ModIndex index, TextureStore textures, TextCache cache,
-        List<ConventionMismatch> conventionMismatches, List<Problem> brushProblems)
+        List<ConventionMismatch> conventionMismatches, List<Problem> brushProblems, Validation.Checks checks)
     {
         Options = options;
         Stack = stack;
@@ -28,6 +29,7 @@ public sealed class ModWorkspace
         Cache = cache;
         _conventionMismatches = conventionMismatches;
         _brushProblems = brushProblems;
+        _checks = checks;
         RecomputeProblems();
     }
 
@@ -36,6 +38,8 @@ public sealed class ModWorkspace
     public ModIndex Index { get; }
     public TextureStore Textures { get; }
     public TextCache Cache { get; }
+    /// <summary>What entities look like in the layers below the mod; see <see cref="EntitySchema"/>.</summary>
+    public EntitySchema Schema => _checks.Schema;
     public IReadOnlyList<ConventionMismatch> ConventionMismatches => _conventionMismatches;
     /// <summary>Index problems plus workspace-level checks (conventions, brush images).</summary>
     public IReadOnlyList<Problem> Problems => _problems;
@@ -101,6 +105,7 @@ public sealed class ModWorkspace
     {
         var saved = await new EntitySaver(this).SaveAsync(session, format, ct);
         Index.UpdateEntity(saved);
+        _checks.Update(Index, saved);
         _conventionMismatches.RemoveAll(m => string.Equals(m.RelativePath, saved.File.RelativePath, StringComparison.OrdinalIgnoreCase));
         RecomputeProblems();
         session.MarkSaved(saved);
@@ -109,7 +114,7 @@ public sealed class ModWorkspace
 
     private void RecomputeProblems()
     {
-        _problems = Index.Problems.Concat(_brushProblems).ToList();
+        _problems = Index.Problems.Concat(_brushProblems).Concat(_checks.Problems).ToList();
         if (_conventionMismatches.Count > 0) _problems.Add(ConventionCheck.ToProblem(_conventionMismatches));
         _problemsByFile = null;
     }
@@ -139,10 +144,11 @@ public sealed class ModWorkspace
         var textures = new TextureStore(index);
 
         progress?.Report(new IndexProgress("Checking files", 0, 1));
-        var (mismatches, brushProblems) = await Task.Run(() => (ConventionCheck.Find(stack).ToList(), CheckBrushes(index, textures)), ct);
+        var (mismatches, brushProblems, checks) = await Task.Run(
+            () => (ConventionCheck.Find(stack).ToList(), CheckBrushes(index, textures), Validation.Checks.Run(index)), ct);
         progress?.Report(new IndexProgress("Checking files", 1, 1));
 
-        return new ModWorkspace(options, stack, index, textures, cache, mismatches, brushProblems);
+        return new ModWorkspace(options, stack, index, textures, cache, mismatches, brushProblems, checks);
     }
 
     /// <summary>Brushes of the edited mod whose image is missing or lies outside its texture.</summary>

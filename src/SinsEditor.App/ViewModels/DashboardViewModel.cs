@@ -14,7 +14,12 @@ public sealed record RaceRow(string DisplayName, string Name, int CapitalShips, 
 
 public sealed record ProblemGroup(string Code, string Title, ProblemSeverity Severity, int Count, string Example, ProblemsTarget Target, bool CanFixAll)
 {
-    public string FixText => Code == ProblemCodes.MissingString ? "Import from base game" : "Fix all";
+    public string FixText => Code switch
+    {
+        ProblemCodes.MissingString => "Import from base game",
+        ProblemCodes.WrongValueKind => "Fix obvious ones",
+        _ => "Fix all",
+    };
 }
 
 public sealed record LayerRow(string Name, string Kind, int Files, int ActiveEntities, int Overrides);
@@ -60,7 +65,7 @@ public sealed partial class DashboardViewModel : PageViewModel
             .Select(g => new ProblemGroup(g.Key, ProblemCodes.Title(g.Key), g.Max(p => p.Severity),
                 g.Key == ProblemCodes.ConventionMismatch ? workspace.ConventionMismatches.Count : g.Count(),
                 g.First().Message, new ProblemsTarget(g.Key),
-                g.Key is ProblemCodes.ConventionMismatch or ProblemCodes.DuplicateString or ProblemCodes.MissingString))
+                g.Key is ProblemCodes.ConventionMismatch or ProblemCodes.DuplicateString or ProblemCodes.MissingString or ProblemCodes.WrongValueKind))
             .OrderByDescending(g => g.Severity)
             .ThenByDescending(g => g.Count)
             .ToList();
@@ -103,7 +108,33 @@ public sealed partial class DashboardViewModel : PageViewModel
             case ProblemCodes.MissingString:
                 await ImportMissingStringsAsync();
                 break;
+            case ProblemCodes.WrongValueKind:
+                await FixValuesAsync();
+                break;
         }
+    }
+
+    private async Task FixValuesAsync()
+    {
+        var fixable = ValueFixes.Fixable(_workspace);
+        int total = _workspace.Problems.Count(p => p.Code == ProblemCodes.WrongValueKind);
+        if (fixable.Count == 0)
+        {
+            MessageBox.Show("None of these values has an obvious fix. Open them from the Problems page.", "Fix values",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        int entities = fixable.Select(f => f.Entity).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+        var answer = MessageBox.Show(
+            $"Fix {fixable.Count:N0} of {total:N0} values in {entities:N0} entities?\n\n" +
+            "Quoted TRUE/FALSE lose their quotes, and decimal commas (0,5) become points (0.5). " +
+            "Each entity is saved in its current format; entities with unsaved edits are skipped.",
+            "Fix values", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.OK) return;
+
+        var (done, skipped) = await ValueFixes.FixAllAsync(_workspace);
+        MessageBox.Show($"Fixed {done:N0} values." + (skipped > 0 ? $" {skipped} entities with unsaved edits were skipped." : ""), "Fix values");
+        await _reload();
     }
 
     private async Task ImportMissingStringsAsync()

@@ -195,6 +195,20 @@ The schema says what each field means, which is what turns raw text into forms, 
   - Shown as its own source on the Problems page and on the dashboard ("Game log: N errors"); warns if the log is
     from a session without the edited mod loaded, or older than the mod's last change.
 
+### Validation
+
+- **Learned schema:** the layers below the mod (base game, base mods) are known to load, so they define what each entity type
+  looks like: its keys, the kinds of value each key holds, and which keys count the items after them. Learned by key name
+  per type, not by position: the game reads sequentially and ignores indentation, and hand-written mods indent freely.
+- **Counters** must be named like one (`count`, `num…`, `…Count`), always match a run of items in the base files, and count
+  two or more somewhere, so a value that's mostly 1 followed by one line isn't mistaken for one. Items may be children
+  or siblings of the counter; a mismatch is only reported if a count that ignores indentation disagrees too.
+- **Wrong value kinds** (errors) include quoted booleans and decimal commas; "Fix obvious ones" repairs those through the
+  normal save path (binary files stay binary). **Unknown keys** are Info only, since newer game versions add keys the
+  base files never use.
+- **Manifests** of the mod: counter vs. entries, repeated entries, listed files that don't exist.
+- **Unused entities** (Info): mod entities nothing refers to, for types whose base-game entities nearly always are.
+
 ## Milestones
 
 | # | Milestone | Done when |
