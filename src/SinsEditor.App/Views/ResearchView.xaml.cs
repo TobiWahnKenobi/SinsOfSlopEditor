@@ -115,6 +115,13 @@ public partial class ResearchView : UserControl
         e.Handled = true;
     }
 
+    private void Badge_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (VM is null || sender is not FrameworkElement { DataContext: ArrowVisual arrow }) return;
+        VM.GoToArrowSourceCommand.Execute(arrow);
+        e.Handled = true;
+    }
+
     private void OnKeyDown(object sender, KeyEventArgs e)
     {
         if (VM is null || e.OriginalSource is TextBox or ComboBox) return;

@@ -15,10 +15,14 @@ using SinsEditor.Core.Validation;
 
 namespace SinsEditor.App.Research;
 
-public sealed record FieldTab(string Field, string Title, BitmapSource? Icon, int Count, bool HasIssues);
+public sealed record FieldTab(string Field, string Title, BitmapSource? Icon, int Count, bool HasIssues, bool IsSelected);
 
 /// <summary>A block drawn on the canvas, in the research window's pixel coordinates.</summary>
-public sealed record BlockVisual(ResearchBlock Block, Rect Bounds, BitmapSource? Backdrop, string Title, BitmapSource? Picture, Point PicturePosition);
+public sealed record BlockVisual(ResearchBlock Block, Rect Bounds, BitmapSource? Backdrop, string Title, BitmapSource? Picture, Point PicturePosition)
+{
+    /// <summary>The part of the picture inside the block (relative to the picture), so tall pictures don't spill out.</summary>
+    public Rect PictureClip => new(0, 0, Math.Max(0, Bounds.Right - PicturePosition.X - 4), Math.Max(0, Bounds.Bottom - PicturePosition.Y - 4));
+}
 
 /// <summary>An empty grid cell shown by the editor overlay (drop target).</summary>
 public sealed record CellVisual(Rect Bounds);
@@ -40,7 +44,14 @@ public sealed partial class SubjectVisual(ResearchSubject subject, Rect bounds, 
     public string ToolTip => Issue is null ? $"{DisplayName}\n{Subject.Name}" : $"{DisplayName}\n{Subject.Name}\n\n{Issue}";
 }
 
-public sealed partial class ArrowVisual(ResearchLink link, PointCollection line, PointCollection head, string tooltip) : ObservableObject
+/// <summary>
+/// Marks where an arrow comes from when its prerequisite isn't drawn on this field: the other field's icon and name,
+/// or "?" when the prerequisite has no place on the research screen.
+/// </summary>
+public sealed record ArrowBadge(Rect Bounds, string Text, BitmapSource? Icon, bool IsMissing);
+
+public sealed partial class ArrowVisual(ResearchLink link, PointCollection line, PointCollection head, string tooltip, ArrowBadge? badge = null)
+    : ObservableObject
 {
     [ObservableProperty]
     private bool _isSelected;
@@ -48,8 +59,10 @@ public sealed partial class ArrowVisual(ResearchLink link, PointCollection line,
     public ResearchLink Link { get; } = link;
     public PointCollection Line { get; } = line;
     public PointCollection Head { get; } = head;
-    public bool IsUnsupported => Link.Shape == ArrowShape.Unsupported;
+    public bool IsUnsupported => Link.Shape == ArrowShape.Unsupported && Badge is null;
     public string ToolTip { get; } = tooltip;
+    public ArrowBadge? Badge { get; } = badge;
+    public bool HasBadge => Badge != null;
 }
 
 public sealed record PrerequisiteRow(ResearchPrerequisite Prerequisite, string Display, bool Exists);
@@ -205,11 +218,9 @@ public sealed partial class ResearchViewModel : PageViewModel
         FieldTabs.Clear();
         foreach (string field in ResearchTree.Fields.Where(f => tree.BlocksOf(f).Any() || tree.Subjects.Any(s => s.Field == f)))
         {
-            string? iconBrush = Facets.TopLevelValues(Race with { Document = _workspace.SessionFor(Race).Document }, "ResearchFieldButtonIcon" + field).FirstOrDefault();
             var subjectsInField = tree.Subjects.Where(s => s.Field == field).Select(s => s.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-            FieldTabs.Add(new FieldTab(field, ResearchTree.FieldTitle(field),
-                iconBrush is null ? null : Image(iconBrush, () => ImageConverter.RenderBrush(_workspace.Textures, iconBrush)),
-                subjectsInField.Count, tree.Issues.Any(i => i.Subject != null && subjectsInField.Contains(i.Subject))));
+            FieldTabs.Add(new FieldTab(field, ResearchTree.FieldTitle(field), FieldIcon(field),
+                subjectsInField.Count, tree.Issues.Any(i => i.Subject != null && subjectsInField.Contains(i.Subject)), field == SelectedField));
         }
 
         Blocks.Clear();
@@ -303,10 +314,19 @@ public sealed partial class ResearchViewModel : PageViewModel
                      (link.Level > 1 ? $" (level {link.Level})" : "") + $"\nArrow: {link.Shape}";
         if (link.Shape == ArrowShape.OtherTab || Tree.CellOf(link.From) is not { } from)
         {
-            // A short stub into the dependent, standing for a prerequisite in another field.
-            var start = new Point(t.Left - 12, t.Top + t.Height / 2);
+            // The prerequisite isn't drawn here: a short stub into the dependent with a badge saying where it is.
+            var start = new Point(t.Left - 14, t.Top + t.Height / 2);
             var end = new Point(t.Left, start.Y);
-            return new ArrowVisual(link, [start, end], Head(start, end), tip + $"\nPrerequisite in {ResearchTree.FieldTitle(link.From.Field ?? "?")}");
+            bool placed = Tree.CellOf(link.From) != null;
+            string field = link.From.Field ?? "";
+            var badgeBounds = new Rect(start.X - 18, start.Y - 9, 18, 18);
+            var badge = placed
+                ? new ArrowBadge(badgeBounds, ResearchTree.FieldTitle(field), FieldIcon(field), IsMissing: false)
+                : new ArrowBadge(badgeBounds, "?", null, IsMissing: true);
+            string where = placed
+                ? $"\nPrerequisite is in {ResearchTree.FieldTitle(field)} (click the badge to go there)"
+                : "\nPrerequisite has no place on the research screen";
+            return new ArrowVisual(link, [start, end], Head(start, end), tip + where, badge);
         }
 
         var f = new Rect(from.Origin.X, from.Origin.Y, from.Layout.ButtonSize.X, from.Layout.ButtonSize.Y);
@@ -325,6 +345,20 @@ public sealed partial class ResearchViewModel : PageViewModel
             _ => [new Point(f.Left + f.Width / 2, f.Top + f.Height / 2), new Point(t.Left + t.Width / 2, t.Top + t.Height / 2)],
         };
         return new ArrowVisual(link, points, Head(points[^2], points[^1]), tip);
+    }
+
+    /// <summary>The field's tab icon, <c>ResearchFieldButtonIcon&lt;Field&gt;</c> in the race (inside a section, not top level).</summary>
+    private BitmapSource? FieldIcon(string field) =>
+        _workspace.SessionFor(Race).Document.Lines.FirstOrDefault(l => l.Key == "ResearchFieldButtonIcon" + field) is { } line
+        && Core.Documents.SinsValue.TryGetString(line.Value, out var brush) && brush.Length > 0
+            ? Image(brush, () => ImageConverter.RenderBrush(_workspace.Textures, brush))
+            : null;
+
+    /// <summary>Jumps to the prerequisite of a stub arrow (switching field).</summary>
+    [RelayCommand]
+    private void GoToArrowSource(ArrowVisual? arrow)
+    {
+        if (arrow?.Link.From.Name is { } name) SelectByName(name);
     }
 
     private static PointCollection Head(Point from, Point to)

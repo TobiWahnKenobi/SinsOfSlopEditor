@@ -49,6 +49,18 @@
                     <DataTemplate DataType="{x:Type rs:FieldTab}">
                         <Button Command="{Binding DataContext.SelectFieldCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
                                 CommandParameter="{Binding Field}" Margin="0,0,6,4" Padding="8,4">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                    <Setter Property="BorderThickness" Value="1,1,1,3" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsSelected}" Value="True">
+                                            <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                            <Setter Property="Background" Value="{DynamicResource SubtleFillColorSecondaryBrush}" />
+                                            <Setter Property="FontWeight" Value="SemiBold" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
                             <StackPanel Orientation="Horizontal">
                                 <Image Source="{Binding Icon}" Width="28" Height="20" Stretch="Uniform" Margin="0,0,6,0"
                                        Visibility="{Binding Icon, Converter={StaticResource NullToCollapsed}}" />
@@ -89,7 +101,12 @@
                         </ItemsControl.ItemContainerStyle>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate DataType="{x:Type rs:BlockVisual}">
-                                <Image Source="{Binding Picture}" Stretch="None" />
+                                <!-- Pictures can be taller than their block (e.g. 120 px blocks); the game doesn't draw past the block. -->
+                                <Image Source="{Binding Picture}" Stretch="None" HorizontalAlignment="Left" VerticalAlignment="Top">
+                                    <Image.Clip>
+                                        <RectangleGeometry Rect="{Binding PictureClip}" />
+                                    </Image.Clip>
+                                </Image>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
@@ -114,8 +131,23 @@
                                               ToolTip="{Binding ToolTip}" MouseLeftButtonDown="Arrow_MouseDown" />
                                     <Polyline x:Name="Line" Points="{Binding Line}" Stroke="#FFD8D8D8" StrokeThickness="2.5" IsHitTestVisible="False" />
                                     <Polygon x:Name="Head" Points="{Binding Head}" Fill="#FFD8D8D8" IsHitTestVisible="False" />
+                                    <Border x:Name="Badge" Canvas.Left="{Binding Badge.Bounds.X}" Canvas.Top="{Binding Badge.Bounds.Y}"
+                                            Width="{Binding Badge.Bounds.Width}" Height="{Binding Badge.Bounds.Height}"
+                                            Background="#E0202830" BorderBrush="#FFD8D8D8" BorderThickness="1" CornerRadius="3" Cursor="Hand"
+                                            ToolTip="{Binding ToolTip}" MouseLeftButtonDown="Badge_MouseDown"
+                                            Visibility="{Binding HasBadge, Converter={StaticResource BoolToVisibility}}">
+                                        <Grid>
+                                            <Image Source="{Binding Badge.Icon}" Stretch="Uniform" Margin="1" />
+                                            <TextBlock x:Name="BadgeText" Text="?" Foreground="White" FontWeight="Bold" FontSize="11"
+                                                       HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" />
+                                        </Grid>
+                                    </Border>
                                 </Canvas>
                                 <DataTemplate.Triggers>
+                                    <DataTrigger Binding="{Binding Badge.IsMissing}" Value="True">
+                                        <Setter TargetName="Badge" Property="Background" Value="{StaticResource ErrorBrush}" />
+                                        <Setter TargetName="BadgeText" Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
                                     <DataTrigger Binding="{Binding IsUnsupported}" Value="True">
                                         <Setter TargetName="Line" Property="Stroke" Value="{StaticResource ErrorBrush}" />
                                         <Setter TargetName="Line" Property="StrokeDashArray" Value="3 2" />
@@ -140,13 +172,6 @@
                                     <Image Source="{Binding Backdrop}" Stretch="Fill" />
                                     <Image Source="{Binding Icon}" Stretch="Fill" Margin="2" />
                                     <Border x:Name="Mark" BorderThickness="0" CornerRadius="2" />
-                                    <TextBlock Text="{Binding DisplayName}" Foreground="White" FontSize="8" TextAlignment="Center" TextWrapping="Wrap"
-                                               VerticalAlignment="Top" Margin="-6,38,-6,0" IsHitTestVisible="False"
-                                               Visibility="{Binding DataContext.ShowNames, RelativeSource={RelativeSource AncestorType=UserControl}, Converter={StaticResource BoolToVisibility}}">
-                                        <TextBlock.Effect>
-                                            <DropShadowEffect ShadowDepth="0" BlurRadius="3" Opacity="1" />
-                                        </TextBlock.Effect>
-                                    </TextBlock>
                                 </Grid>
                                 <DataTemplate.Triggers>
                                     <DataTrigger Binding="{Binding HasIssue}" Value="True">
@@ -161,6 +186,23 @@
                                         <Setter TargetName="Mark" Property="BorderThickness" Value="3" />
                                     </DataTrigger>
                                 </DataTemplate.Triggers>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- Names: their own layer above every button, so the next row doesn't cover them. -->
+                    <ItemsControl ItemsSource="{Binding Subjects}" ItemsPanel="{StaticResource CanvasPanel}" ItemContainerStyle="{StaticResource AtBounds}"
+                                  IsHitTestVisible="False"
+                                  Visibility="{Binding ShowNames, Converter={StaticResource BoolToVisibility}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type rs:SubjectVisual}">
+                                <Canvas>
+                                    <!-- Centred under the icon, one cell (64 px) wide, overlapping the icon's lower edge and the row gap. -->
+                                    <Border Canvas.Left="-7" Canvas.Top="26" Width="64" Background="#D0101418" CornerRadius="2" Padding="1,0">
+                                        <TextBlock Text="{Binding DisplayName}" Foreground="White" FontSize="7.5" TextAlignment="Center"
+                                                   TextWrapping="Wrap" MaxHeight="20" TextTrimming="CharacterEllipsis" Margin="0" />
+                                    </Border>
+                                </Canvas>
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>

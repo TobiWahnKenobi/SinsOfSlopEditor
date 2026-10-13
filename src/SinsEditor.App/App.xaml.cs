@@ -17,6 +17,7 @@ namespace SinsEditor.App;
 /// <c>--search &lt;text&gt;</c> opens global search with a query;
 /// <c>--show-first-problem</c> clicks the first problem link of an entity page;
 /// <c>--loading-preview</c> shows the loading screen (for checking it in a screenshot);
+/// <c>--research-names</c> turns on names on a research page;
 /// <c>--screenshot &lt;file.png&gt;</c> renders that page to a PNG and exits.
 /// </summary>
 public partial class App : Application
@@ -62,6 +63,7 @@ public partial class App : Application
             await Task.Delay(800);
         }
 
+        if (args.ResearchNames && shell.CurrentPage is Research.ResearchViewModel research) research.ShowNames = true;
         if (args.LoadingPreview)
         {
             shell.LoadingText = "Reading entities (1,234 of 3,633)";
@@ -112,6 +114,7 @@ public partial class App : Application
         {
             ShowFirstProblem = args.Contains("--show-first-problem");
             LoadingPreview = args.Contains("--loading-preview");
+            ResearchNames = args.Contains("--research-names");
             for (int i = 0; i < args.Length - 1; i++)
             {
                 string value = args[i + 1];
@@ -137,6 +140,7 @@ public partial class App : Application
         public string? Search { get; }
         public bool ShowFirstProblem { get; }
         public bool LoadingPreview { get; }
+        public bool ResearchNames { get; }
 
         private static NavTarget ParseTarget(string value)
         {
