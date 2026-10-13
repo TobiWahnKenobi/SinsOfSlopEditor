@@ -84,6 +84,7 @@ public sealed partial class PropertyRowViewModel : ObservableObject
     public IReadOnlyList<string> Choices => Hint?.KnownValues ?? [];
     public bool CanGoTo => Kind == RowKind.Reference && Hint?.Reference == ReferenceKind.Entity && Error is null && Value.Length > 0;
     public bool IsReadOnly => IsCounter;
+    public bool CanEditBrush => Kind == RowKind.Reference && Hint?.Reference == ReferenceKind.Brush && Error is null && Value.Length > 0;
 
     /// <summary>What a reference's value means, e.g. the display name of an entity or the text of a string.</summary>
     public string? ValueDescription => Kind == RowKind.Reference ? _owner.Describe(Hint!.Reference!.Value, Value) : null;
@@ -117,6 +118,7 @@ public sealed partial class PropertyRowViewModel : ObservableObject
         OnPropertyChanged(nameof(BoolValue));
         OnPropertyChanged(nameof(ValueDescription));
         OnPropertyChanged(nameof(CanGoTo));
+        OnPropertyChanged(nameof(CanEditBrush));
     }
 
     private void Commit()
@@ -170,6 +172,12 @@ public sealed partial class PropertyRowViewModel : ObservableObject
     private void GoTo()
     {
         if (CanGoTo) _owner.Navigate(new EntityTarget(Value));
+    }
+
+    [RelayCommand]
+    private void EditBrush()
+    {
+        if (CanEditBrush) _owner.Navigate(new BrushTarget(Value));
     }
 
     [RelayCommand]

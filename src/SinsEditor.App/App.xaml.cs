@@ -73,7 +73,8 @@ public partial class App : Application
         if (args.Screenshot is { } file)
         {
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
-            await Task.Delay(500);
+            // Some pages compute previews in the background (e.g. the brush editor).
+            await Task.Delay(3000);
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             SaveScreenshot(window, file);
             Shutdown(shell.LoadError is null ? 0 : 1);
@@ -151,6 +152,8 @@ public partial class App : Application
                 "entity" => new EntityTarget(parts[1]),
                 "problems" => new ProblemsTarget(parts.Length > 1 ? parts[1] : null),
                 "research" => new ResearchTarget(parts[1]),
+                "brushes" => new BrushListTarget(),
+                "brush" => new BrushTarget(parts.Length > 1 && parts[1].Length > 0 ? parts[1] : null),
                 _ => new DashboardTarget(),
             };
         }

@@ -1,4 +1,3 @@
-using SinsEditor.Core.Conversion;
 using SinsEditor.Core.Documents;
 using SinsEditor.Core.Editing;
 using SinsEditor.Core.FileSystem;
@@ -9,6 +8,8 @@ namespace SinsEditor.Core.Textures;
 /// <summary>
 /// What a brush should become. <paramref name="Images"/> holds every image of the brush, keyed by state
 /// (<see cref="Brush.SimpleState"/> for Simple brushes) — callers pass existing images they don't replace, too.
+/// All images go into <paramref name="Texture"/>, unless <paramref name="TextureByState"/> names a texture per state:
+/// the game's icon sheets keep each state in its own atlas (…_normal, …_pressed, …_highlight, …_disabled) at the same place.
 /// </summary>
 public sealed record BrushEditRequest(
     string BrushName,
@@ -17,10 +18,13 @@ public sealed record BrushEditRequest(
     string Texture,
     bool NewTexture,
     TextureFileFormat NewTextureFormat = TextureFileFormat.Tga32,
-    string? BrushesFile = null);
+    string? BrushesFile = null,
+    IReadOnlyDictionary<string, string>? TextureByState = null);
 
 public enum AtlasMode
 {
+    /// <summary>The new images have the old sizes: they replace the old pixels where they are; nothing else changes.</summary>
+    InPlace,
     /// <summary>Every image in the atlas belongs to a brush that gets written: everything is packed anew.</summary>
     Repack,
     /// <summary>Brushes that can't be rewritten (lower layers) use the atlas: their regions stay, new images go into free space.</summary>
@@ -29,7 +33,11 @@ public enum AtlasMode
 
 public sealed record BrushEditPlan(ChangeSet Changes, AtlasMode Mode, int AtlasWidth, int AtlasHeight, int MovedRegions, PixelImage Atlas);
 
-/// <summary>Plans brush edits: atlas packing, texture writing and every <c>.brushes</c> change that follows.</summary>
+/// <summary>
+/// Plans brush edits: atlas packing, texture writing and every <c>.brushes</c> change that follows.
+/// Works on an atlas set: one texture, or the per-state textures of an icon sheet, which share one layout —
+/// a brush occupies the same region in every texture of the set.
+/// </summary>
 public static class BrushEditor
 {
     private const string BrushManifest = "brush.manifest";
@@ -50,113 +58,172 @@ public static class BrushEditor
         return null;
     }
 
-    private sealed record Region(string Brush, string State, PixelBox Box, string File);
+    /// <summary>
+    /// One place in the layout: a brush's images that share a region, at most one per texture of the set.
+    /// <see cref="States"/> lists, per texture, the brush states that point there (Normal and Focused often share).
+    /// </summary>
+    private sealed class Slot(string key, string brush, string file, PixelBox? oldBox, bool isTarget)
+    {
+        public string Key { get; } = key;
+        public string Brush { get; } = brush;
+        public string File { get; } = file;
+        public PixelBox? OldBox { get; } = oldBox;
+        public bool IsTarget { get; } = isTarget;
+        public Dictionary<string, PixelImage?> Images { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public Dictionary<string, List<string>> States { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public int Width => OldBox?.Width ?? Images.Values.First(i => i != null)!.Width;
+        public int Height => OldBox?.Height ?? Images.Values.First(i => i != null)!.Height;
+    }
 
     public static async Task<BrushEditPlan> PlanAsync(ModWorkspace workspace, BrushEditRequest request, CancellationToken ct = default)
     {
         var index = workspace.Index;
         var mod = workspace.Stack.EditedMod ?? throw new InvalidOperationException("No mod is open for editing.");
-        string texture = Path.GetFileNameWithoutExtension(request.Texture);
-        var existingTexture = request.NewTexture ? null : index.Textures.GetValueOrDefault(texture)
-            ?? throw new InvalidOperationException($"Texture '{texture}' doesn't exist.");
+        string Norm(string t) => Path.GetFileNameWithoutExtension(t);
+
+        var textureOf = request.Images.Keys.ToDictionary(s => s,
+            s => Norm(request.TextureByState?.GetValueOrDefault(s) ?? request.Texture), StringComparer.OrdinalIgnoreCase);
+        var set = textureOf.Values.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (request.NewTexture && set.Count > 1) throw new InvalidOperationException("A new texture holds all states of the brush.");
+
+        var resolved = new Dictionary<string, ResolvedFile?>(StringComparer.OrdinalIgnoreCase);
+        foreach (string t in set)
+        {
+            resolved[t] = request.NewTexture ? null : index.Textures.GetValueOrDefault(t)
+                ?? throw new InvalidOperationException($"Texture '{t}' doesn't exist.");
+        }
+
         NamedEntry? targetEntry = request.IsNew ? null : index.Brushes.Entries.GetValueOrDefault(request.BrushName)
             ?? throw new InvalidOperationException($"Brush '{request.BrushName}' doesn't exist.");
         string brushesFile = targetEntry?.File.RelativePath
             ?? request.BrushesFile ?? throw new InvalidOperationException("Choose a .brushes file for the new brush.");
-
         // Files that will be written: the mod's own brush files, plus the edited brush's file (copied in if it's lower).
         bool Writable(string file) => mod.Contains(file) || string.Equals(file, brushesFile, StringComparison.OrdinalIgnoreCase);
 
-        // Everything else stored in the atlas.
-        var regions = new List<Region>();
-        if (existingTexture != null)
+        // Formats and current pixels of the set.
+        bool needsAlpha = request.Images.Values.Any(TextureFormats.HasTransparency);
+        var formats = new Dictionary<string, TextureFileFormat>(StringComparer.OrdinalIgnoreCase);
+        var oldAtlases = new Dictionary<string, PixelImage>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (t, file) in resolved)
         {
-            foreach (var entry in index.Brushes.Entries.Values)
+            if (file is null)
             {
-                if (string.Equals(entry.Name, request.BrushName, StringComparison.OrdinalIgnoreCase)) continue;
-                foreach (var (state, image) in Brush.FromEntry(entry).Images)
-                {
-                    if (image.Box.Width > 0 && image.Box.Height > 0 && SameTexture(image.FileName, texture))
-                        regions.Add(new Region(entry.Name, state, image.Box, entry.File.RelativePath));
-                }
+                formats[t] = request.NewTextureFormat;
+                continue;
+            }
+            formats[t] = TextureFormats.ForRewrite(TextureFormats.Detect(file.AbsolutePath)
+                ?? throw new InvalidOperationException($"'{Path.GetFileName(file.RelativePath)}' has a format the editor can't write back."), needsAlpha);
+            oldAtlases[t] = TextureLoader.Load(file.AbsolutePath);
+        }
+        bool dds = formats.Values.Any(TextureFormats.IsDds);
+        int padding = dds ? 4 : 2, align = dds ? 4 : 1;
+
+        // The edited brush. Per texture, states with identical pixels share a region (Normal and Focused often do);
+        // the i-th distinct image of every texture shares slot i, so an icon sheet's states line up across its textures.
+        var slots = new List<Slot>();
+        foreach (var byTexture in request.Images.GroupBy(kv => textureOf[kv.Key], StringComparer.OrdinalIgnoreCase))
+        {
+            int i = 0;
+            foreach (var same in byTexture.GroupBy(kv => ImageImport.Hash(kv.Value)))
+            {
+                if (slots.Count <= i) slots.Add(new Slot($"target:{i}", request.BrushName, brushesFile, null, isTarget: true));
+                var slot = slots[i++];
+                slot.Images[byTexture.Key] = same.First().Value;
+                slot.States[byTexture.Key] = [.. same.Select(kv => kv.Key)];
+            }
+        }
+        // Slots of one brush share a region, so their images need one size.
+        foreach (var slot in slots)
+        {
+            if (slot.Images.Values.Select(img => (img!.Width, img.Height)).Distinct().Count() > 1)
+                throw new InvalidOperationException("All states of the brush need the same size.");
+        }
+
+        // Everything else in the set, grouped by brush and region.
+        var others = new Dictionary<string, Slot>();
+        foreach (var entry in index.Brushes.Entries.Values)
+        {
+            if (string.Equals(entry.Name, request.BrushName, StringComparison.OrdinalIgnoreCase)) continue;
+            foreach (var (state, image) in Brush.FromEntry(entry).Images)
+            {
+                string t = Norm(image.FileName);
+                if (image.Box.Width <= 0 || image.Box.Height <= 0 || !resolved.ContainsKey(t)) continue;
+                string key = $"{entry.Name}@{image.Box}";
+                if (!others.TryGetValue(key, out var slot)) others[key] = slot = new Slot(key, entry.Name, entry.File.RelativePath, image.Box, isTarget: false);
+                if (!slot.States.TryGetValue(t, out var states)) slot.States[t] = states = [];
+                states.Add(state);
+                slot.Images.TryAdd(t, null);
             }
         }
 
-        TextureFileFormat format;
-        PixelImage? oldAtlas = null;
-        if (existingTexture is null) format = request.NewTextureFormat;
-        else
-        {
-            format = TextureFormats.Detect(existingTexture.AbsolutePath)
-                ?? throw new InvalidOperationException($"'{Path.GetFileName(existingTexture.RelativePath)}' has a format the editor can't write back.");
-            oldAtlas = TextureLoader.Load(existingTexture.AbsolutePath);
-        }
-        bool needsAlpha = request.Images.Values.Any(TextureFormats.HasTransparency);
-        format = TextureFormats.ForRewrite(format, needsAlpha);
-        bool dds = TextureFormats.IsDds(format);
-        int padding = dds ? 4 : 2, align = dds ? 4 : 1;
-
-        var mode = regions.All(r => Writable(r.File)) ? AtlasMode.Repack : AtlasMode.Append;
-
-        // Images to place: in repack mode the others' images too (cropped from the old atlas); identical pixels share a region.
-        var images = new Dictionary<string, PixelImage>();          // hash → image
-        var keyOf = new Dictionary<(string Brush, string State), string>();
-        string Add(PixelImage image)
-        {
-            string hash = ImageImport.Hash(image);
-            images.TryAdd(hash, image);
-            return hash;
-        }
-        foreach (var (state, image) in request.Images) keyOf[(request.BrushName, state)] = Add(image);
+        var inPlace = InPlaceBoxes(targetEntry, slots, resolved, Norm);
+        var mode = inPlace != null ? AtlasMode.InPlace : others.Values.All(s => Writable(s.File)) ? AtlasMode.Repack : AtlasMode.Append;
         if (mode == AtlasMode.Repack)
         {
-            foreach (var r in regions) keyOf[(r.Brush, r.State)] = Add(oldAtlas!.Crop(r.Box));
+            foreach (var slot in others.Values)
+            {
+                foreach (string t in slot.Images.Keys.ToList()) slot.Images[t] = oldAtlases[t].Crop(slot.OldBox!.Value);
+            }
+            slots.AddRange(others.Values);
         }
 
-        var newHashes = mode == AtlasMode.Repack ? images.Keys.ToList() : request.Images.Values.Select(ImageImport.Hash).Distinct().ToList();
-        var fixedRegions = mode == AtlasMode.Append ? regions.Select(r => r.Box).Distinct().ToList() : [];
-        var pack = AtlasPacker.Pack(newHashes.Select(h => new PackItem(h, images[h].Width, images[h].Height)).ToList(), padding, align, fixedRegions,
-            minWidth: mode == AtlasMode.Append ? oldAtlas?.Width ?? 1 : 1,
-            minHeight: mode == AtlasMode.Append ? oldAtlas?.Height ?? 1 : 1)
+        int minW = mode != AtlasMode.Repack ? oldAtlases.Values.Select(a => a.Width).DefaultIfEmpty(1).Max() : 1;
+        int minH = mode != AtlasMode.Repack ? oldAtlases.Values.Select(a => a.Height).DefaultIfEmpty(1).Max() : 1;
+        var fixedRegions = mode == AtlasMode.Append ? others.Values.Select(s => s.OldBox!.Value).Distinct().ToList() : [];
+        var pack = inPlace != null ? new PackResult(minW, minH, inPlace) : AtlasPacker.Pack(slots.Select(s => new PackItem(s.Key, s.Width, s.Height)).ToList(), padding, align, fixedRegions, minW, minH)
             ?? throw new InvalidOperationException("The images don't fit into a 4096×4096 texture. Use a new texture.");
 
-        var atlas = AtlasPacker.Compose(pack.Width, pack.Height, mode == AtlasMode.Append ? oldAtlas : null,
-            newHashes.Select(h => (images[h], pack.Boxes[h])), padding);
-
         var changes = new ChangeSet(request.IsNew ? $"New brush {request.BrushName}" : $"Edit brush {request.BrushName}");
-        string extension = existingTexture != null ? Path.GetExtension(existingTexture.RelativePath) : TextureFormats.Extension(format);
-        string texturePath = existingTexture?.RelativePath ?? $"Textures/{texture}{extension}";
-        changes.Set(new FileChange(texturePath, null,
-            $"{(existingTexture is null ? "New" : mode == AtlasMode.Repack ? "Repacked" : "Added to")} {pack.Width}×{pack.Height} {format}",
-            TextureFormats.Encode(atlas, format)));
+        var atlases = new Dictionary<string, PixelImage>(StringComparer.OrdinalIgnoreCase);
+        foreach (string t in set)
+        {
+            var placements = slots.Where(s => s.Images.TryGetValue(t, out var img) && img != null)
+                .Select(s => (s.Images[t]!, pack.Boxes[s.Key]));
+            var old = mode == AtlasMode.Repack ? null : oldAtlases.GetValueOrDefault(t);
+            // In place, each texture keeps its own size and the neighbours' padding stays untouched.
+            var atlas = AtlasPacker.Compose(mode == AtlasMode.InPlace ? old!.Width : pack.Width, mode == AtlasMode.InPlace ? old!.Height : pack.Height,
+                old, placements, mode == AtlasMode.InPlace ? 0 : padding);
+            atlases[t] = atlas;
+            var file = resolved[t];
+            string path = file?.RelativePath ?? $"Textures/{t}{TextureFormats.Extension(formats[t])}";
+            changes.Set(new FileChange(path, null,
+                $"{(file is null ? "New" : mode switch { AtlasMode.Repack => "Repacked", AtlasMode.Append => "Added to", _ => "Replaced images in" })} {atlas.Width}×{atlas.Height} {formats[t]}",
+                TextureFormats.Encode(atlas, formats[t])));
+        }
 
-        // .brushes files: new boxes for moved regions, then the edited brush itself.
+        // .brushes files.
         var docs = new Dictionary<string, SinsDocument>(StringComparer.OrdinalIgnoreCase);
         async Task<SinsDocument> Doc(string file)
         {
             if (docs.TryGetValue(file, out var d)) return d;
-            var resolved = workspace.Stack.Resolve(file);
-            d = resolved is null
+            var found = workspace.Stack.Resolve(file);
+            d = found is null
                 ? SinsDocument.Parse("TXT\r\nonlyLoadOnDemand FALSE\r\nbrushCount 0\r\n"u8.ToArray())
-                : SinsDocument.Load(await workspace.Cache.GetTextPathAsync(resolved.AbsolutePath, ct));
+                : SinsDocument.Load(await workspace.Cache.GetTextPathAsync(found.AbsolutePath, ct));
             return docs[file] = d;
         }
 
         int moved = 0;
         if (mode == AtlasMode.Repack)
         {
-            foreach (var r in regions)
+            foreach (var slot in others.Values)
             {
-                var box = pack.Boxes[keyOf[(r.Brush, r.State)]];
-                if (box == r.Box) continue;
-                SetImage(await Doc(r.File), r.Brush, r.State, texture, box);
+                var box = pack.Boxes[slot.Key];
+                if (box == slot.OldBox) continue;
+                var doc = await Doc(slot.File);
+                foreach (var (t, states) in slot.States)
+                    foreach (string state in states) SetImage(doc, slot.Brush, state, t, box);
                 moved++;
             }
         }
 
-        var target = await Doc(brushesFile);
-        var newImages = request.Images.ToDictionary(kv => kv.Key, kv => pack.Boxes[keyOf[(request.BrushName, kv.Key)]]);
-        WriteBrush(target, request.BrushName, texture, newImages);
+        // In place, the brush keeps its regions and its definition stays as it is.
+        var target = mode == AtlasMode.InPlace ? null : await Doc(brushesFile);
+        var newImages = new Dictionary<string, (string Texture, PixelBox Box)>(StringComparer.OrdinalIgnoreCase);
+        foreach (var slot in slots.Where(s => s.IsTarget))
+            foreach (var (t, states) in slot.States)
+                foreach (string state in states) newImages[state] = (t, pack.Boxes[slot.Key]);
+        if (target != null) WriteBrush(target, request.BrushName, newImages);
         foreach (var (file, doc) in docs)
             changes.Set(new FileChange(file, doc, file.Equals(brushesFile, StringComparison.OrdinalIgnoreCase)
                 ? (request.IsNew ? $"Add brush {request.BrushName}" : $"Update brush {request.BrushName}")
@@ -174,17 +241,47 @@ public static class BrushEditor
                 $"Add {Path.GetFileName(brushesFile)}"));
         }
 
-        if (mode == AtlasMode.Append && existingTexture != null && !mod.Contains(existingTexture.RelativePath))
-            changes.Notes.Add($"'{texture}' comes from {existingTexture.Layer.Name}. The mod gets its own copy with the new images added; " +
-                              "every existing image stays where it was, so brushes elsewhere keep working.");
+        if (mode != AtlasMode.Repack && resolved.Values.Any(f => f != null && !mod.Contains(f.RelativePath)))
+            changes.Notes.Add($"{string.Join(", ", set)} {(set.Count == 1 ? "comes" : "come")} from a lower layer. The mod gets its own copy with the new " +
+                              "images added; every existing image stays where it was, so brushes elsewhere keep working.");
+        if (set.Count > 1)
+            changes.Notes.Add($"The brush keeps one texture per state ({string.Join(", ", set)}); all of them get the same layout.");
         if (pack.Width > 2048 || pack.Height > 2048)
             changes.Notes.Add($"The atlas is {pack.Width}×{pack.Height}. Very large textures use a lot of video memory.");
 
-        return new BrushEditPlan(changes, mode, pack.Width, pack.Height, moved, atlas);
+        string previewTexture = textureOf.GetValueOrDefault(BrushStates.Normal) ?? textureOf.GetValueOrDefault(Brush.SimpleState) ?? set[0];
+        return new BrushEditPlan(changes, mode, pack.Width, pack.Height, moved, atlases[previewTexture]);
     }
 
-    private static bool SameTexture(string fileName, string texture) =>
-        string.Equals(Path.GetFileNameWithoutExtension(fileName), texture, StringComparison.OrdinalIgnoreCase);
+    /// <summary>
+    /// The regions the edited brush has now, if every slot fits its old one exactly: same size, same texture for all of its
+    /// states, and no two slots sharing a region. Null otherwise (new brush, new texture, other size).
+    /// </summary>
+    private static Dictionary<string, PixelBox>? InPlaceBoxes(NamedEntry? target, List<Slot> slots,
+        Dictionary<string, ResolvedFile?> textures, Func<string, string> norm)
+    {
+        if (target is null || textures.Values.Any(f => f is null)) return null;
+        var old = Brush.FromEntry(target).Images;
+        var boxes = new Dictionary<string, PixelBox>();
+        var used = new HashSet<(string, PixelBox)>();
+        foreach (var slot in slots.Where(s => s.IsTarget))
+        {
+            PixelBox? box = null;
+            foreach (var (t, states) in slot.States)
+            {
+                foreach (string state in states)
+                {
+                    if (!old.TryGetValue(state, out var image) || !string.Equals(norm(image.FileName), t, StringComparison.OrdinalIgnoreCase)) return null;
+                    if (box != null && box != image.Box) return null;
+                    box = image.Box;
+                }
+                if (!used.Add((t.ToLowerInvariant(), box!.Value))) return null;
+            }
+            if (box is not { } b || b.Width != slot.Width || b.Height != slot.Height) return null;
+            boxes[slot.Key] = b;
+        }
+        return boxes;
+    }
 
     private static string Box(PixelBox b) => $"[ {b.X} , {b.Y} , {b.Width} , {b.Height} ]";
 
@@ -205,7 +302,7 @@ public static class BrushEditor
     /// Writes the edited brush as a whole block (name, content, kept margin blocks, images), replacing the old one in place,
     /// or appending it and raising <c>brushCount</c>.
     /// </summary>
-    private static void WriteBrush(SinsDocument doc, string brush, string texture, IReadOnlyDictionary<string, PixelBox> images)
+    private static void WriteBrush(SinsDocument doc, string brush, IReadOnlyDictionary<string, (string Texture, PixelBox Box)> images)
     {
         string e = doc.DefaultEnding;
         var existing = FindBrush(doc, brush);
@@ -226,16 +323,18 @@ public static class BrushEditor
         }
         if (!states)
         {
+            var (texture, box) = images[Brush.SimpleState];
             lines.Add(SinsLine.Create("\t", "fileName", SinsValue.FormatString(texture), e));
-            lines.Add(SinsLine.Create("\t", "pixelBox", Box(images[Brush.SimpleState]), e));
+            lines.Add(SinsLine.Create("\t", "pixelBox", Box(box), e));
         }
         else
         {
             foreach (string state in BrushStates.All.Where(images.ContainsKey).Concat(images.Keys.Where(k => !BrushStates.All.Contains(k))))
             {
+                var (texture, box) = images[state];
                 lines.Add(SinsLine.Create("\t", state, "", e));
                 lines.Add(SinsLine.Create("\t\t", "fileName", SinsValue.FormatString(texture), e));
-                lines.Add(SinsLine.Create("\t\t", "pixelBox", Box(images[state]), e));
+                lines.Add(SinsLine.Create("\t\t", "pixelBox", Box(box), e));
             }
         }
 

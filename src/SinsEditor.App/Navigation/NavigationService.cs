@@ -17,6 +17,11 @@ public sealed record ProblemsTarget(string? Code = null) : NavTarget;
 
 public sealed record ResearchTarget(string RaceName) : NavTarget;
 
+public sealed record BrushListTarget : NavTarget;
+
+/// <summary>Brush editor; a null name creates a new brush.</summary>
+public sealed record BrushTarget(string? BrushName) : NavTarget;
+
 public sealed record HistoryEntry(NavTarget Target, string Title, DateTime VisitedAt)
 {
     public string TimeText => VisitedAt.ToString("HH:mm:ss");

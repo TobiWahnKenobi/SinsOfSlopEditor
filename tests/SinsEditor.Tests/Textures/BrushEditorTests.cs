@@ -18,10 +18,10 @@ public sealed class BrushEditorTests : IAsyncLifetime
         Directory.CreateDirectory(Path.Combine(_mod, "Textures"));
         File.Copy(Path.Combine(game, "entity.manifest"), Path.Combine(_mod, "Entity.manifest"));
 
-        // The mod's brush manifest = the game's plus one own file with two brushes in one own atlas.
+        // The mod's brush manifest = the game's plus own files: two brushes in one own atlas, and an icon sheet.
         var manifest = File.ReadAllText(Path.Combine(game, "brush.manifest"));
         int count = int.Parse(System.Text.RegularExpressions.Regex.Match(manifest, @"brushFileCount (\d+)").Groups[1].Value);
-        manifest = manifest.Replace($"brushFileCount {count}", $"brushFileCount {count + 1}") + "brushFile \"Test.brushes\"\r\n";
+        manifest = manifest.Replace($"brushFileCount {count}", $"brushFileCount {count + 2}") + "brushFile \"Test.brushes\"\r\nbrushFile \"Sheet.brushes\"\r\n";
         File.WriteAllText(Path.Combine(_mod, "brush.manifest"), manifest);
 
         _red = Solid(40, 30, 220, 20, 20);
@@ -32,6 +32,21 @@ public sealed class BrushEditorTests : IAsyncLifetime
             "TXT\r\nonlyLoadOnDemand FALSE\r\nbrushCount 2\r\n" +
             "brush\r\n\tname \"TEST_RED\"\r\n\tcontent \"Simple\"\r\n\tfileName \"TestAtlas\"\r\n\tpixelBox [ 2 , 2 , 40 , 30 ]\r\n" +
             "brush\r\n\tname \"TEST_BLUE\"\r\n\tcontent \"Simple\"\r\n\tfileName \"TestAtlas\"\r\n\tpixelBox [ 50 , 2 , 40 , 30 ]\r\n");
+
+        // An icon sheet: each state in its own texture, both brushes at the same place in every texture.
+        foreach (var (suffix, factor) in new[] { ("normal", 1.0), ("pressed", 0.5) })
+        {
+            var sheet = AtlasPacker.Compose(64, 64, null,
+                [(Solid(30, 20, (byte)(200 * factor), 0, 0), new PixelBox(0, 0, 30, 20)), (Solid(30, 20, 0, (byte)(200 * factor), 0), new PixelBox(0, 20, 30, 20))], 0);
+            File.WriteAllBytes(Path.Combine(_mod, "Textures", $"Sheet_{suffix}.tga"), TextureFormats.Encode(sheet, TextureFileFormat.Tga32));
+        }
+        string SheetBrush(string name, int y) =>
+            $"brush\r\n\tname \"{name}\"\r\n\tcontent \"States\"\r\n" +
+            $"\tPressed\r\n\t\tfileName \"Sheet_pressed\"\r\n\t\tpixelBox [ 0 , {y} , 30 , 20 ]\r\n" +
+            $"\tFocused\r\n\t\tfileName \"Sheet_normal\"\r\n\t\tpixelBox [ 0 , {y} , 30 , 20 ]\r\n" +
+            $"\tNormal\r\n\t\tfileName \"Sheet_normal\"\r\n\t\tpixelBox [ 0 , {y} , 30 , 20 ]\r\n";
+        File.WriteAllText(Path.Combine(_mod, "Window", "Sheet.brushes"),
+            "TXT\r\nonlyLoadOnDemand FALSE\r\nbrushCount 2\r\n" + SheetBrush("SHEET_A", 0) + SheetBrush("SHEET_B", 20));
         _workspace = await Open();
     }
 
@@ -124,7 +139,7 @@ public sealed class BrushEditorTests : IAsyncLifetime
             .Take(20)
             .ToDictionary(e => e.Name, e => ws.Textures.RenderBrush(e.Name).Image);
         Assert.NotEmpty(neighbours);
-        var icon = Solid(30, 30, 10, 200, 200);
+        var icon = Solid(37, 29, 10, 200, 200); // a size no game brush has, so it can't go in place
 
         var plan = await BrushEditor.PlanAsync(ws, new BrushEditRequest(brush, false,
             new Dictionary<string, PixelImage> { [Brush.SimpleState] = icon }, texture, false));
@@ -136,6 +151,37 @@ public sealed class BrushEditorTests : IAsyncLifetime
         AssertSame(icon, after.Textures.RenderBrush(brush).Image);
         foreach (var (name, image) in neighbours) AssertSame(image!, after.Textures.RenderBrush(name).Image);
         Assert.Equal(LayerKind.EditedMod, after.Index.Textures[texture].Layer.Kind);
+    }
+
+    [SkippableTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Editing_an_icon_sheet_brush_keeps_one_texture_per_state(bool newSize)
+    {
+        var ws = Workspace;
+        var brush = Brush.FromEntry(ws.Index.Brushes.Entries["SHEET_A"]);
+        var neighbour = Brush.FromEntry(ws.Index.Brushes.Entries["SHEET_B"]);
+        var neighbourImages = neighbour.Images.Keys.ToDictionary(s => s, s => ws.Textures.RenderBrush(neighbour.Name, s).Image);
+        var box = brush.Images.Values.First().Box;
+        var normal = Solid(box.Width + (newSize ? 6 : 0), box.Height + (newSize ? 3 : 0), 200, 40, 160);
+        var images = brush.Images.Keys.ToDictionary(s => s, s => ImageImport.DeriveState(normal, s));
+        var byState = brush.Images.ToDictionary(kv => kv.Key, kv => kv.Value.FileName);
+
+        var plan = await BrushEditor.PlanAsync(ws, new BrushEditRequest(brush.Name, false, images, byState.Values.First(), false, TextureByState: byState));
+        Assert.Equal(newSize ? AtlasMode.Repack : AtlasMode.InPlace, plan.Mode);
+        Assert.Equal(2, plan.Changes.Changes.Count(c => c.RelativePath.StartsWith("Textures", StringComparison.OrdinalIgnoreCase)));
+        Assert.Equal(newSize, plan.Changes.Changes.Any(c => c.RelativePath.EndsWith(".brushes", StringComparison.OrdinalIgnoreCase)));
+        plan.Changes.Apply(ws);
+
+        var after = await Open();
+        var edited = Brush.FromEntry(after.Index.Brushes.Entries[brush.Name]);
+        Assert.Single(edited.Images.Values.Select(i => i.Box).Distinct());
+        foreach (var (state, image) in images)
+        {
+            Assert.Equal(byState[state], edited.Images[state].FileName, StringComparer.OrdinalIgnoreCase);
+            AssertSame(image, after.Textures.RenderBrush(brush.Name, state).Image);
+        }
+        foreach (var (state, image) in neighbourImages) AssertSame(image!, after.Textures.RenderBrush(neighbour.Name, state).Image);
     }
 
     [SkippableFact]

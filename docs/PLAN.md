@@ -155,8 +155,11 @@ The schema says what each field means, which is what turns raw text into forms, 
     to the target size, keep the aspect ratio or not. State brushes can get their other states generated from Normal
     (Disabled = desaturated and dimmed, CursorOver = brightened, Pressed = darkened, Focused = same as Normal),
     each replaceable by its own image.
-  - **Target texture:** an existing atlas or a new one. Existing atlases from a lower layer are copied into the mod
-    under a new name rather than overridden, so brushes elsewhere that use the original keep working.
+  - **Target texture:** an existing atlas or a new one. An atlas from a lower layer is overridden by a copy in the mod
+    that keeps every existing region where it is, so brushes elsewhere that use the original keep working.
+  - **Icon sheets:** many icons keep each state in its own texture (`…_normal`, `…_pressed`, `…_highlight`,
+    `…_disabled`) at the same `pixelBox`. Keeping the texture keeps that: all textures of the set get one shared layout.
+  - **Same size:** if the new images have the old sizes, they replace the old pixels in place; nothing else changes.
   - **Packing:** when images are added, the atlas is rebuilt from all brushes stored in it, packed with a MaxRects bin packer
     into the smallest power-of-two texture (up to 4096×4096; a second atlas is started beyond that).
     - Regions get a 2 px gutter (edge pixels repeated) so scaled icons don't bleed into each other. DDS atlases additionally

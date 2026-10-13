@@ -1,0 +1,43 @@
+<UserControl x:Class="SinsEditor.App.Views.BrushListView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:br="clr-namespace:SinsEditor.App.BrushEditing">
+    <DockPanel Margin="24,24,24,12">
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <Button DockPanel.Dock="Right" Content="New brush…" Command="{Binding NewCommand}" VerticalAlignment="Center" />
+            <TextBlock Text="{Binding Title}" Style="{StaticResource PageTitle}" />
+        </DockPanel>
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <TextBlock DockPanel.Dock="Right" Text="{Binding CountText}" Style="{StaticResource Muted}" VerticalAlignment="Center" Margin="12,0,0,0" />
+            <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Delay=200}" Width="300" ToolTip="Search by name, texture or file" />
+            <CheckBox Content="Only this mod's brushes" IsChecked="{Binding OnlyMod}" Margin="12,0,0,0" VerticalAlignment="Center" />
+        </DockPanel>
+        <DataGrid ItemsSource="{Binding View}" Style="{StaticResource ListGrid}" SelectedItem="{Binding SelectedRow}"
+                  MouseDoubleClick="Grid_MouseDoubleClick" RowHeight="44">
+            <DataGrid.Columns>
+                <DataGridTemplateColumn Width="72" CanUserSort="False">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="{x:Type br:BrushRow}">
+                            <Image Source="{Binding Preview}" MaxWidth="64" MaxHeight="38" Stretch="Uniform" />
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTemplateColumn Header="Name" Width="2*" SortMemberPath="Name">
+                    <DataGridTemplateColumn.CellTemplate>
+                        <DataTemplate DataType="{x:Type br:BrushRow}">
+                            <TextBlock VerticalAlignment="Center" TextTrimming="CharacterEllipsis">
+                                <Hyperlink Command="{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                    <Run Text="{Binding Name, Mode=OneWay}" />
+                                </Hyperlink>
+                            </TextBlock>
+                        </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                </DataGridTemplateColumn>
+                <DataGridTextColumn Header="Content" Width="*" Binding="{Binding Content}" />
+                <DataGridTextColumn Header="Texture" Width="*" Binding="{Binding Texture}" />
+                <DataGridTextColumn Header="File" Width="*" Binding="{Binding File}" />
+                <DataGridTextColumn Header="Layer" Width="*" Binding="{Binding Layer}" />
+            </DataGrid.Columns>
+        </DataGrid>
+    </DockPanel>
+</UserControl>

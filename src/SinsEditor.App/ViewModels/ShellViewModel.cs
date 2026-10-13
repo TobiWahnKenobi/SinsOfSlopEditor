@@ -316,6 +316,7 @@ public sealed partial class ShellViewModel : ObservableObject
             int count = index.EntitiesIn(category).Count();
             if (count > 0) NavItems.Add(new NavItem(category.Name, new CategoryTarget(category.Id), count));
         }
+        NavItems.Add(new NavItem("Brushes", new BrushListTarget(), index.Brushes.Entries.Count));
         NavItems.Add(new NavItem("Problems", new ProblemsTarget(), Workspace.ProblemCount, isProblems: true));
     }
 
@@ -328,7 +329,8 @@ public sealed partial class ShellViewModel : ObservableObject
             item.IsSelected = item.Target == target
                 || (page is EntityViewModel ev && item.Target == new CategoryTarget(ev.Category.Id))
                 || (page is RaceViewModel or Research.ResearchViewModel && item.Target == new CategoryTarget(EntityCategories.Races.Id))
-                || (target is ProblemsTarget && item.IsProblems);
+                || (target is ProblemsTarget && item.IsProblems)
+                || (target is BrushTarget && item.Target is BrushListTarget);
         }
     }
 
@@ -344,6 +346,9 @@ public sealed partial class ShellViewModel : ObservableObject
                 entity.EntityType == "Player" ? new RaceViewModel(ws, entity, navigate) : new EntityViewModel(ws, entity, navigate),
             ProblemsTarget p => new ProblemsViewModel(ws, p.Code, navigate),
             ResearchTarget r when ws.Index.Entities.TryGetValue(r.RaceName, out var race) => new Research.ResearchViewModel(ws, race, navigate),
+            BrushListTarget => new BrushEditing.BrushListViewModel(ws, navigate),
+            BrushTarget b when b.BrushName is null || ws.Index.Brushes.Contains(b.BrushName) =>
+                new BrushEditing.BrushEditorViewModel(ws, b.BrushName, navigate, ReloadAsync),
             _ => new DashboardViewModel(ws, navigate, ReloadAsync),
         };
     }
