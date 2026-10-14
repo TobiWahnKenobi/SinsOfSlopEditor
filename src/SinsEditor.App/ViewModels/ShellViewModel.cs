@@ -370,7 +370,7 @@ public sealed partial class ShellViewModel : ObservableObject
         if (entity.EntityType == "Player")
         {
             var race = new RaceViewModel(ws, entity, navigate);
-            race.Detail.PendingLine = line;
+            if (race.Detail is { } detail) detail.PendingLine = line;
             return race;
         }
         return new EntityViewModel(ws, entity, navigate) { PendingLine = line };

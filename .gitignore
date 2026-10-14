@@ -484,3 +484,6 @@ $RECYCLE.BIN/
 
 # Local paths to game data for corpus tests
 testpaths.local.json
+
+# Packaged builds (build/publish.ps1)
+dist/
