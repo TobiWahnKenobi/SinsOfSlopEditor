@@ -18,12 +18,44 @@ public partial class MainWindow : Window
 
     public ShellViewModel ViewModel { get; }
 
-    /// <summary>Mouse back/forward buttons.</summary>
+    /// <summary>
+    /// Mouse back/forward buttons. The middle button on a link (or a navigating button such as a sidebar entry) opens it in a new tab, with Shift in a
+    /// new tab in the background.
+    /// </summary>
     protected override void OnPreviewMouseDown(MouseButtonEventArgs e)
     {
         base.OnPreviewMouseDown(e);
+        if (e.ChangedButton == MouseButton.Middle && OpenInNewTab(e.OriginalSource as DependencyObject, Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)))
+        {
+            e.Handled = true;
+            return;
+        }
         if (e.ChangedButton == MouseButton.XButton1) { ViewModel.GoBackCommand.Execute(null); e.Handled = true; }
         if (e.ChangedButton == MouseButton.XButton2) { ViewModel.GoForwardCommand.Execute(null); e.Handled = true; }
+    }
+
+    private bool OpenInNewTab(DependencyObject? source, bool background)
+    {
+        for (var d = source; d != null; d = d is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
+                 ? System.Windows.Media.VisualTreeHelper.GetParent(d) ?? LogicalTreeHelper.GetParent(d)
+                 : LogicalTreeHelper.GetParent(d))
+        {
+            if (d is System.Windows.Documents.Hyperlink { Command: { } command } link)
+            {
+                if (!command.CanExecute(link.CommandParameter)) return false;
+                ViewModel.FollowInNewTab(() => command.Execute(link.CommandParameter), background);
+                return true;
+            }
+            // Buttons that navigate (sidebar entries, links styled as buttons); other buttons don't react to the middle button.
+            if (d is System.Windows.Controls.Primitives.ButtonBase { Command: { } buttonCommand, CommandParameter: NavTarget target })
+            {
+                ViewModel.FollowInNewTab(() => buttonCommand.Execute(target), background);
+                return true;
+            }
+            // Tab headers keep their own middle click (close).
+            if (d is FrameworkElement { DataContext: DocumentTab }) return false;
+        }
+        return false;
     }
 
     private void HistoryList_MouseUp(object sender, MouseButtonEventArgs e)

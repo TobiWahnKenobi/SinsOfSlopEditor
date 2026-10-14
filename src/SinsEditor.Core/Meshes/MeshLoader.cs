@@ -11,7 +11,11 @@ public sealed record LoadedMesh(string Name, ResolvedFile File, MeshData Data);
 /// (hardpoint placement times emitter placement), and what it came from.
 /// </summary>
 public sealed record AttachedMesh(string PointName, string Particle, ResolvedFile ParticleFile, string MeshFileName, LoadedMesh Mesh, Matrix4x4 Placement,
-    string Effect = "");
+    string Effect = "", ParticleEmitter? Emitter = null)
+{
+    /// <summary>The placement at a time: mesh particles may turn (e.g. a rotating hull section) before being placed.</summary>
+    public Matrix4x4 PlacementAt(float seconds) => Emitter is null ? Placement : Emitter.SpinAt(seconds) * Placement;
+}
 
 /// <summary>A particle effect on a <c>Flair-</c> hardpoint: where it sits on the mesh and what it is.</summary>
 public sealed record AttachedEffect(string PointName, string Particle, Matrix4x4 Placement, ParticleEffectDefinition Definition);
@@ -61,7 +65,7 @@ public static class MeshLoader
                 if (!meshes.TryGetValue(emitter.MeshName, out var loaded)) meshes[emitter.MeshName] = loaded = await LoadAsync(workspace, emitter.MeshName, ct);
                 if (loaded is null) continue;
                 var placement = MeshMath.Placement(emitter.Orientation, emitter.Position) * pointPlacement;
-                result.Add(new AttachedMesh(point.Name, name, file, emitter.MeshName, loaded, placement, emitter.Effect));
+                result.Add(new AttachedMesh(point.Name, name, file, emitter.MeshName, loaded, placement, emitter.Effect, emitter));
             }
         }
         return result;

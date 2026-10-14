@@ -26,7 +26,11 @@ public sealed record GameMaterial(PixelImage? Diffuse, PixelImage? Data, PixelIm
 /// </summary>
 public sealed record GameSceneItem(MeshData Mesh, Matrix4x4 Placement, IReadOnlyList<GameMaterial> Materials, EffectFile Effect,
     IReadOnlyCollection<string>? Passes = null, IReadOnlyDictionary<string, PixelImage>? Textures = null,
-    IReadOnlyDictionary<string, Vector4>? Constants = null);
+    IReadOnlyDictionary<string, Vector4>? Constants = null, Func<float, Matrix4x4>? PlacementAt = null)
+{
+    /// <summary>Where the item is at a playback time (mesh particles may turn); <see cref="Placement"/> if it doesn't move.</summary>
+    public Matrix4x4 PlacementAtTime(float seconds) => PlacementAt?.Invoke(seconds) ?? Placement;
+}
 
 /// <summary>Everything the game-shader view draws: the meshes, the skybox's environment maps and the team colour.</summary>
 /// <summary>How a particle emitter draws: its effect (fixed function for most) and its two textures.</summary>
@@ -47,7 +51,11 @@ public sealed record GameParticleEffect(Matrix4x4 Placement, ParticleSystem Syst
 /// </remarks>
 public sealed record GameScene(MeshData Primary, IReadOnlyList<GameSceneItem> Items, CubeMap? Environment, CubeMap? Irradiance, Vector4 TeamColor,
     GameSceneItem? Skybox = null, float StarDistance = 100_000f, IReadOnlyList<GameParticleEffect>? Particles = null,
-    PixelImage? Background = null);
+    PixelImage? Background = null)
+{
+    /// <summary>Whether playback changes anything: particles, or meshes that move over time.</summary>
+    public bool IsAnimated => Particles is { Count: > 0 } || Items.Any(i => i.PlacementAt != null);
+}
 
 /// <summary>Where the camera looks from: an orbit around <see cref="Target"/> in game space (left-handed, ships face +Z).</summary>
 public record struct OrbitCamera(Vector3 Target, float Yaw, float Pitch, float Distance)

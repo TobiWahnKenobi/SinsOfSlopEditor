@@ -19,7 +19,7 @@ namespace SinsEditor.Viewer;
 /// the picture an alpha channel (mesh coverage, particle brightness), for exporting images.
 /// </summary>
 public sealed record GameRenderOptions(bool ShowPoints, bool Wireframe, bool ShowParticles = true, bool Transparent = false,
-    PixelImage? Background = null);
+    PixelImage? Background = null, float Time = 0);
 
 /// <summary>
 /// Draws a <see cref="GameScene"/> with the game's own shaders on Direct3D 11, offscreen, and returns the picture as BGRA
@@ -612,7 +612,7 @@ public sealed class GameRenderer : IDisposable
         var lightView = LookAtLH(center + lightDirection * radius * 3, center, Math.Abs(lightDirection.Y) > 0.99f ? Vector3.UnitZ : Vector3.UnitY);
         var lightProjection = OrthoLH(radius * 2.2f, radius * 2.2f, 0, radius * 6);
         var shadowBias = new Matrix4x4(0.5f, 0, 0, 0, 0, -0.5f, 0, 0, 0, 0, 1, 0, 0.5f, 0.5f, 0, 1);
-        RenderShadowMap(lightView * lightProjection);
+        RenderShadowMap(lightView * lightProjection, options.Time);
 
         // The game's shaders take world positions relative to the camera (the camera sits at the origin).
         var eye = camera.Eye;
@@ -643,13 +643,14 @@ public sealed class GameRenderer : IDisposable
 
         foreach (var item in _items)
         {
-            var world = item.Item.Placement * cameraOffset;
-            DrawItem(item, world, view, projection, eye, item.Item.Placement * lightView * lightProjection * shadowBias, scene!, lightPosition, radius);
+            var placement = item.Item.PlacementAtTime(options.Time);
+            var world = placement * cameraOffset;
+            DrawItem(item, world, view, projection, eye, placement * lightView * lightProjection * shadowBias, scene!, lightPosition, radius);
             if (options.Wireframe)
                 DrawHelper(item.Vertices, item.Groups.Select(g => (g.Indices, g.Count)), world * view * projection, new Vector4(0.35f, 0.8f, 1f, 1f), _wirePs, _wireRaster, _depthRead);
         }
 
-        if (options.Transparent) RenderMask(cameraOffset * view * projection);
+        if (options.Transparent) RenderMask(cameraOffset * view * projection, options.Time);
         if (options.ShowParticles && scene?.Particles is { } particles)
         {
             _context.OutputMerger.SetTargets(_depthView, _colorView);
@@ -697,12 +698,12 @@ public sealed class GameRenderer : IDisposable
     }
 
     /// <summary>Mesh coverage as white on black, using the depth of the colour pass (only visible surfaces), for the alpha channel.</summary>
-    private void RenderMask(Matrix4x4 cameraViewProjection)
+    private void RenderMask(Matrix4x4 cameraViewProjection, float time)
     {
         _context.OutputMerger.SetTargets(_depthView, _maskView);
         _context.ClearRenderTargetView(_maskView, new RawColor4(0, 0, 0, 0));
         foreach (var item in _items)
-            DrawHelper(item.Vertices, item.Groups.Select(g => (g.Indices, g.Count)), item.Item.Placement * cameraViewProjection, Vector4.One, _wirePs, _noCull, _depthRead);
+            DrawHelper(item.Vertices, item.Groups.Select(g => (g.Indices, g.Count)), item.Item.PlacementAtTime(time) * cameraViewProjection, Vector4.One, _wirePs, _noCull, _depthRead);
         _context.OutputMerger.SetTargets(_depthView, _colorView);
     }
 
@@ -863,7 +864,7 @@ public sealed class GameRenderer : IDisposable
         _context.PixelShader.SetShaderResources(0, 16, new ShaderResourceView[16]);
     }
 
-    private void RenderShadowMap(Matrix4x4 lightViewProjection)
+    private void RenderShadowMap(Matrix4x4 lightViewProjection, float time)
     {
         _context.OutputMerger.SetTargets(_shadowDepthView, _shadowView);
         _context.Rasterizer.SetViewport(new RawViewportF { X = 0, Y = 0, Width = ShadowSize, Height = ShadowSize, MinDepth = 0, MaxDepth = 1 });
@@ -871,7 +872,7 @@ public sealed class GameRenderer : IDisposable
         _context.ClearDepthStencilView(_shadowDepthView, DepthStencilClearFlags.Depth, 1f, 0);
         _context.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
         foreach (var item in _items)
-            DrawHelper(item.Vertices, item.Groups.Select(g => (g.Indices, g.Count)), item.Item.Placement * lightViewProjection, Vector4.One, _depthPs, _noCull, _depthOn);
+            DrawHelper(item.Vertices, item.Groups.Select(g => (g.Indices, g.Count)), item.Item.PlacementAtTime(time) * lightViewProjection, Vector4.One, _depthPs, _noCull, _depthOn);
     }
 
     private void DrawHelper(Buffer vertices, IEnumerable<(Buffer Indices, int Count)> groups, Matrix4x4 wvp, Vector4 color, PixelShader ps,

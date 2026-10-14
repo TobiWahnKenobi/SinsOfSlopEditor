@@ -3,7 +3,14 @@ using System.Numerics;
 namespace SinsEditor.Core.Meshes;
 
 /// <summary>An emitter of a particle effect: its mesh (for mesh particles), where it sits in the effect, and its shader.</summary>
-public sealed record ParticleEmitter(string Name, string MeshName, Vector3 Position, Matrix4x4 Orientation, string Effect = "");
+public sealed record ParticleEmitter(string Name, string MeshName, Vector3 Position, Matrix4x4 Orientation, string Effect = "",
+    float AngularSpeed = 0, Vector3 RotationAxis = default)
+{
+    /// <summary>How a mesh particle turns over time: around its rotation axis (emitter space) at its angular speed (radians/second).</summary>
+    public Matrix4x4 SpinAt(float seconds) =>
+        AngularSpeed == 0 || RotationAxis.LengthSquared() < 1e-8f ? Matrix4x4.Identity
+            : Matrix4x4.CreateFromAxisAngle(Vector3.Normalize(RotationAxis), AngularSpeed * seconds);
+}
 
 /// <summary>The emitters of a Sins <c>.particle</c> in its text form; enough to place the meshes it shows.</summary>
 public sealed class ParticleData
@@ -17,13 +24,19 @@ public sealed class ParticleData
         var data = new ParticleData();
         bool inEmitter = false, positioned = false, oriented = false;
         string name = "", mesh = "", effect = "";
+        float minSpin = 0, maxSpin = 0;
+        bool rotates = true;
+        Vector3 axis = default;
         Vector3 position = default;
         var orientation = Matrix4x4.Identity;
         int orientationRow = -1;
 
         void Flush()
         {
-            if (inEmitter) data.Emitters.Add(new ParticleEmitter(name, mesh, position, orientation, effect));
+            if (inEmitter) data.Emitters.Add(new ParticleEmitter(name, mesh, position, orientation, effect, rotates ? (minSpin + maxSpin) / 2 : 0, axis));
+            minSpin = maxSpin = 0;
+            rotates = true;
+            axis = default;
             inEmitter = positioned = oriented = false;
             name = mesh = effect = "";
             position = default;
@@ -52,6 +65,10 @@ public sealed class ParticleData
                 case "Name" when inEmitter && name.Length == 0: name = MeshData.Unquote(value); break;
                 case "MeshName" when inEmitter: mesh = MeshData.Unquote(value); break;
                 case "PipelineEffectID" when inEmitter: effect = MeshData.Unquote(value); break;
+                case "ParticleMinStartAngularSpeed" when inEmitter: minSpin = MeshData.Float(value); break;
+                case "ParticleMaxStartAngularSpeed" when inEmitter: maxSpin = MeshData.Float(value); break;
+                case "ParticlesRotate" when inEmitter: rotates = value.Equals("TRUE", StringComparison.OrdinalIgnoreCase); break;
+                case "MeshParticleRotationAxis" when inEmitter: axis = MeshData.Vector(value); break;
                 // The emitter's own placement comes first; later Position keys belong to nested settings.
                 case "Position" when inEmitter && !positioned: position = MeshData.Vector(value); positioned = true; break;
                 case "Orientation" when inEmitter && positioned && !oriented: orientationRow = 0; oriented = true; break;

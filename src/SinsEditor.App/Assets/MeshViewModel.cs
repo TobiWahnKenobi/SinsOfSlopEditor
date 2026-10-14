@@ -469,7 +469,9 @@ public sealed partial class MeshViewModel : PageViewModel
             foreach (var a in attached)
             {
                 var effect = GameShaders.ForDrawing(_workspace, a.Effect.Length > 0 ? a.Effect : GameShaders.Ship);
-                items.Add(new GameSceneItem(a.Mesh.Data, a.Placement, GameMaterials(a.Mesh.Data), effect));
+                // Mesh particles that turn (a rotating hull section) move with the playback time.
+                items.Add(new GameSceneItem(a.Mesh.Data, a.Placement, GameMaterials(a.Mesh.Data), effect,
+                    PlacementAt: a.Emitter is { AngularSpeed: not 0 } ? a.PlacementAt : null));
             }
             // Compile here, off the UI thread: the renderer then finds them compiled.
             foreach (var effect in items.Select(i => i.Effect).DistinctBy(e => e.Name))

@@ -153,7 +153,7 @@ public sealed class GameMeshView : Grid
             double viewAspect = ActualWidth / Math.Max(1, ActualHeight), pictureAspect = (double)request.Width / request.Height;
             var camera = pictureAspect < viewAspect ? _camera with { Distance = _camera.Distance * (float)(viewAspect / pictureAspect) } : _camera;
             pixels = _renderer.Render(width, height, camera,
-                new GameRenderOptions(false, false, ShowParticles, Transparent: request.Background is null, Background: request.Background));
+                new GameRenderOptions(false, false, ShowParticles, Transparent: true, Time: (float)ParticleTime));
         }
         catch (SharpDX.SharpDXException ex)
         {
@@ -161,7 +161,26 @@ public sealed class GameMeshView : Grid
             return null;
         }
         Invalidate();
-        return factor == 1 ? new PixelImage(width, height, pixels) : Downsample(pixels, width, height, factor);
+        var picture = factor == 1 ? new PixelImage(width, height, pixels) : Downsample(pixels, width, height, factor);
+        // The model is rendered on transparency and laid over the background afterwards, so the background's own alpha
+        // (e.g. a round button) is kept and the model's edges blend into it.
+        return request.Background is { } background ? Over(picture, background) : picture;
+    }
+
+    /// <summary>Porter-Duff "over": <paramref name="top"/> on <paramref name="bottom"/> (scaled to the same size), straight alpha.</summary>
+    public static PixelImage Over(PixelImage top, PixelImage bottom)
+    {
+        if (bottom.Width != top.Width || bottom.Height != top.Height) bottom = ImageOps.Scale(bottom, top.Width, top.Height);
+        var result = new byte[top.Bgra.Length];
+        for (int i = 0; i < result.Length; i += 4)
+        {
+            double at = top.Bgra[i + 3] / 255.0, ab = bottom.Bgra[i + 3] / 255.0;
+            double a = at + ab * (1 - at);
+            for (int c = 0; c < 3; c++)
+                result[i + c] = a <= 0 ? (byte)0 : (byte)Math.Round((top.Bgra[i + c] * at + bottom.Bgra[i + c] * ab * (1 - at)) / a);
+            result[i + 3] = (byte)Math.Round(a * 255);
+        }
+        return new PixelImage(top.Width, top.Height, result);
     }
 
     /// <summary>Box filter by an integer factor, averaging with premultiplied alpha so transparent edges don't darken.</summary>
@@ -243,7 +262,7 @@ public sealed class GameMeshView : Grid
     {
         // Playback: advance the particle time by the frame's real time × speed.
         var now = (e as RenderingEventArgs)?.RenderingTime ?? TimeSpan.Zero;
-        if (IsPlaying && Scene?.Particles is { Count: > 0 })
+        if (IsPlaying && Scene?.IsAnimated == true)
         {
             double dt = _lastFrame == TimeSpan.Zero ? 0 : Math.Min(0.1, (now - _lastFrame).TotalSeconds);
             double time = ParticleTime + dt * PlaybackSpeed;
@@ -261,7 +280,7 @@ public sealed class GameMeshView : Grid
         byte[] pixels;
         try
         {
-            pixels = _renderer.Render(width, height, _camera, new GameRenderOptions(ShowPoints, ShowWireframe, ShowParticles));
+            pixels = _renderer.Render(width, height, _camera, new GameRenderOptions(ShowPoints, ShowWireframe, ShowParticles, Time: (float)ParticleTime));
         }
         catch (SharpDX.SharpDXException ex)
         {
@@ -275,7 +294,7 @@ public sealed class GameMeshView : Grid
         }
         _bitmap.WritePixels(new Int32Rect(0, 0, width, height), pixels, width * 4, 0);
         // Keep rendering frames while playing.
-        if (IsPlaying && Scene?.Particles is { Count: > 0 }) Invalidate();
+        if (IsPlaying && Scene?.IsAnimated == true) Invalidate();
     }
 
     protected override void OnMouseDown(MouseButtonEventArgs e)

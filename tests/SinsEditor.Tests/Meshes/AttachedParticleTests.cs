@@ -99,4 +99,32 @@ public sealed class AttachedParticleTests : IAsyncLifetime
         Assert.Equal("_Big", MeshScaler.CopySuffix("OmegaM", "OmegaM_Big"));
         Assert.Equal("_Huge", MeshScaler.CopySuffix("OmegaM", "Huge"));
     }
+
+    [SkippableFact]
+    public async Task The_rotating_section_turns_with_time()
+    {
+        var ws = await Workspace();
+        var omega = (await MeshLoader.LoadAsync(ws, "OmegaM"))!;
+        var rotor = Assert.Single(await MeshLoader.AttachedMeshesAsync(ws, omega.Data), a => a.Mesh.Name == "OmegaR");
+        Assert.NotEqual(0f, rotor.Emitter!.AngularSpeed);
+        Assert.Equal(rotor.Placement, rotor.PlacementAt(0));
+        var later = rotor.PlacementAt(2);
+        Assert.NotEqual(rotor.Placement, later);
+        // It turns about its axis in place: the attachment point stays where it is.
+        Assert.True(Vector3.Distance(rotor.Placement.Translation, later.Translation) < 0.001f);
+    }
+
+    [Fact]
+    public void Pictures_go_over_the_background_keeping_its_transparency()
+    {
+        // Background: left half opaque grey, right half transparent; picture: an opaque red pixel and a clear one in each half.
+        byte[] bg = [100, 100, 100, 255, 0, 0, 0, 0];
+        byte[] top = [0, 0, 255, 255, 0, 0, 0, 0];
+        var result = SinsEditor.Viewer.GameMeshView.Over(new SinsEditor.Core.Textures.PixelImage(2, 1, top), new SinsEditor.Core.Textures.PixelImage(2, 1, bg));
+        Assert.Equal(new byte[] { 0, 0, 255, 255, 0, 0, 0, 0 }, result.Bgra);
+        var half = SinsEditor.Viewer.GameMeshView.Over(new SinsEditor.Core.Textures.PixelImage(1, 1, [0, 0, 255, 128]),
+            new SinsEditor.Core.Textures.PixelImage(1, 1, [100, 100, 100, 255]));
+        Assert.Equal(255, half.Bgra[3]);
+        Assert.InRange(half.Bgra[2], 170, 185);
+    }
 }

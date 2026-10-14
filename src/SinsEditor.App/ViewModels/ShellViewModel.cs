@@ -228,20 +228,35 @@ public sealed partial class ShellViewModel : ObservableObject
     }
 
     /// <summary>Navigates the current tab, or opens a new tab when Ctrl is held.</summary>
+    /// <summary>Set while a link is followed with the middle button: the navigation goes to a new tab (in the background with Shift).</summary>
+    private bool? _newTabInBackground;
+
     public void Navigate(NavTarget target)
     {
-        if (SelectedTab is null || Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) OpenInNewTab(target);
+        if (_newTabInBackground is { } background) OpenInNewTab(target, activate: !background);
+        else if (SelectedTab is null || Keyboard.Modifiers.HasFlag(ModifierKeys.Control)) OpenInNewTab(target);
         else SelectedTab.Navigation.Navigate(target);
     }
 
-    public void OpenInNewTab(NavTarget target)
+    public void OpenInNewTab(NavTarget target) => OpenInNewTab(target, activate: true);
+
+    /// <summary>Opens <paramref name="target"/> in a new tab; a background tab doesn't take the focus.</summary>
+    public void OpenInNewTab(NavTarget target, bool activate)
     {
         var tab = new DocumentTab(History, CreatePage);
         tab.Navigation.PropertyChanged += OnTabNavigationChanged;
         Tabs.Add(tab);
         tab.Navigation.Navigate(target);
-        SelectedTab = tab;
+        if (activate || SelectedTab is null) SelectedTab = tab;
         CloseTabCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>Runs <paramref name="follow"/> (e.g. a link's command) so that where it navigates opens in a new tab.</summary>
+    public void FollowInNewTab(Action follow, bool background)
+    {
+        _newTabInBackground = background;
+        try { follow(); }
+        finally { _newTabInBackground = null; }
     }
 
     [RelayCommand]
