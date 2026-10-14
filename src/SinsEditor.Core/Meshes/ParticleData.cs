@@ -2,8 +2,8 @@ using System.Numerics;
 
 namespace SinsEditor.Core.Meshes;
 
-/// <summary>An emitter of a particle effect: its mesh (for mesh particles) and where it sits in the effect.</summary>
-public sealed record ParticleEmitter(string Name, string MeshName, Vector3 Position, Matrix4x4 Orientation);
+/// <summary>An emitter of a particle effect: its mesh (for mesh particles), where it sits in the effect, and its shader.</summary>
+public sealed record ParticleEmitter(string Name, string MeshName, Vector3 Position, Matrix4x4 Orientation, string Effect = "");
 
 /// <summary>The emitters of a Sins <c>.particle</c> in its text form; enough to place the meshes it shows.</summary>
 public sealed class ParticleData
@@ -16,16 +16,16 @@ public sealed class ParticleData
     {
         var data = new ParticleData();
         bool inEmitter = false, positioned = false, oriented = false;
-        string name = "", mesh = "";
+        string name = "", mesh = "", effect = "";
         Vector3 position = default;
         var orientation = Matrix4x4.Identity;
         int orientationRow = -1;
 
         void Flush()
         {
-            if (inEmitter) data.Emitters.Add(new ParticleEmitter(name, mesh, position, orientation));
+            if (inEmitter) data.Emitters.Add(new ParticleEmitter(name, mesh, position, orientation, effect));
             inEmitter = positioned = oriented = false;
-            name = mesh = "";
+            name = mesh = effect = "";
             position = default;
             orientation = Matrix4x4.Identity;
             orientationRow = -1;
@@ -51,6 +51,7 @@ public sealed class ParticleData
                 case "NumAffectors": Flush(); break;
                 case "Name" when inEmitter && name.Length == 0: name = MeshData.Unquote(value); break;
                 case "MeshName" when inEmitter: mesh = MeshData.Unquote(value); break;
+                case "PipelineEffectID" when inEmitter: effect = MeshData.Unquote(value); break;
                 // The emitter's own placement comes first; later Position keys belong to nested settings.
                 case "Position" when inEmitter && !positioned: position = MeshData.Vector(value); positioned = true; break;
                 case "Orientation" when inEmitter && positioned && !oriented: orientationRow = 0; oriented = true; break;

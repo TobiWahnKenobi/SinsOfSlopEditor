@@ -18,7 +18,31 @@
                 <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Margin="0,0,0,12" Visibility="{Binding Status, Converter={StaticResource NullToCollapsed}}" />
 
                 <CheckBox Content="Hardpoints (weapons red, exhausts blue, others yellow)" IsChecked="{Binding ShowPoints}" Margin="0,0,0,4" />
-                <CheckBox Content="Wireframe" IsChecked="{Binding ShowWireframe}" Margin="0,0,0,12" />
+                <CheckBox Content="Wireframe" IsChecked="{Binding ShowWireframe}" Margin="0,0,0,4" />
+                <CheckBox Content="Draw with the game's shaders" IsChecked="{Binding UseGameShaders}" Margin="0,0,0,6"
+                          ToolTip="Uses the game's own .fx files (a mod's own versions first) with the material's diffuse, data and normal maps" />
+                <Grid Margin="0,0,0,4" Visibility="{Binding UseGameShaders, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <TextBlock Text="Shader" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding Shaders}" SelectedItem="{Binding Shader}" Margin="0,2" />
+                    <TextBlock Grid.Row="1" Text="Skybox" VerticalAlignment="Center" />
+                    <ComboBox Grid.Row="1" Grid.Column="1" ItemsSource="{Binding Skyboxes}" SelectedItem="{Binding Skybox}" Margin="0,2"
+                              ToolTip="The environment and irradiance cube maps the ship reflects and is lit by" />
+                    <TextBlock Grid.Row="2" Text="Team colour" VerticalAlignment="Center" />
+                    <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding TeamColorChoices}" SelectedItem="{Binding TeamColor}" Margin="0,2" />
+                </Grid>
+                <CheckBox Content="Cloud layer" IsChecked="{Binding ShowClouds}" Margin="0,0,0,4"
+                          Visibility="{Binding HasClouds, Converter={StaticResource BoolToVisibility}}" />
+                <TextBlock Text="{Binding ShaderNote}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,12" FontSize="12"
+                           Visibility="{Binding UseGameShaders, Converter={StaticResource BoolToVisibility}}" />
 
                 <TextBlock Text="Materials" Style="{StaticResource SectionHeader}" />
                 <ItemsControl ItemsSource="{Binding Materials}" Margin="0,0,0,12">
@@ -134,7 +158,10 @@
 
         <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
 
+        <viewer:GameMeshView Grid.Column="2" Scene="{Binding GameScene}" ShowPoints="{Binding ShowPoints}" ShowWireframe="{Binding ShowWireframe}"
+                             Visibility="{Binding UseGameShaders, Converter={StaticResource BoolToVisibility}}" />
         <viewer:MeshViewport Grid.Column="2" Mesh="{Binding Mesh}" Textures="{Binding Textures}" Attachments="{Binding Attachments}"
+                             Visibility="{Binding UseSimpleView, Converter={StaticResource BoolToVisibility}}"
                              ShowPoints="{Binding ShowPoints}" ShowWireframe="{Binding ShowWireframe}" />
     </Grid>
 </UserControl>

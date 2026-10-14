@@ -10,7 +10,8 @@ public sealed record LoadedMesh(string Name, ResolvedFile File, MeshData Data);
 /// A mesh shown by a particle that a <c>Flair-</c> hardpoint attaches: where it sits relative to the main mesh
 /// (hardpoint placement times emitter placement), and what it came from.
 /// </summary>
-public sealed record AttachedMesh(string PointName, string Particle, ResolvedFile ParticleFile, string MeshFileName, LoadedMesh Mesh, Matrix4x4 Placement);
+public sealed record AttachedMesh(string PointName, string Particle, ResolvedFile ParticleFile, string MeshFileName, LoadedMesh Mesh, Matrix4x4 Placement,
+    string Effect = "");
 
 /// <summary>A particle attached through a <c>Flair-</c> hardpoint, and the meshes its emitters show.</summary>
 public sealed record AttachedParticle(string Name, ResolvedFile? File, IReadOnlyList<string> MeshFileNames);
@@ -57,7 +58,7 @@ public static class MeshLoader
                 if (!meshes.TryGetValue(emitter.MeshName, out var loaded)) meshes[emitter.MeshName] = loaded = await LoadAsync(workspace, emitter.MeshName, ct);
                 if (loaded is null) continue;
                 var placement = MeshMath.Placement(emitter.Orientation, emitter.Position) * pointPlacement;
-                result.Add(new AttachedMesh(point.Name, name, file, emitter.MeshName, loaded, placement));
+                result.Add(new AttachedMesh(point.Name, name, file, emitter.MeshName, loaded, placement, emitter.Effect));
             }
         }
         return result;

@@ -29,6 +29,12 @@ public sealed record AttachedParticleRow(string Particle, string Meshes, IReadOn
 
 public sealed record UsageRow(string Title, string Detail, NavTarget Target);
 
+/// <summary>A team colour to preview the team colour areas (diffuse alpha) with.</summary>
+public sealed record TeamColorChoice(string Name, System.Numerics.Vector4 Color)
+{
+    public override string ToString() => Name;
+}
+
 /// <summary>A mesh in 3D with its textures and hardpoints, its materials, and the entities that use it.</summary>
 public sealed partial class MeshViewModel : PageViewModel
 {
@@ -96,6 +102,173 @@ public sealed partial class MeshViewModel : PageViewModel
     [ObservableProperty]
     private IReadOnlyList<MeshAttachment>? _attachments;
 
+    // ---- Game shaders: the mesh drawn with the game's own .fx, the skybox's environment maps and a team colour ----
+
+    [ObservableProperty]
+    private GameScene? _gameScene;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(UseSimpleView))]
+    private bool _useGameShaders = true;
+
+    [ObservableProperty]
+    private string? _shader;
+
+    [ObservableProperty]
+    private string? _skybox;
+
+    [ObservableProperty]
+    private TeamColorChoice _teamColor = TeamColors[0];
+
+    [ObservableProperty]
+    private string? _shaderNote;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasClouds))]
+    private IReadOnlyList<string> _cloudPasses = [];
+
+    [ObservableProperty]
+    private bool _showClouds = true;
+
+    /// <summary>True once the game-shader scene is built (screenshots wait for it).</summary>
+    [ObservableProperty]
+    private bool _sceneReady;
+
+    public bool HasClouds => CloudPasses.Count > 0;
+
+    partial void OnShowCloudsChanged(bool value) => _ = BuildSceneAsync();
+
+    private LoadedMesh? _loaded;
+    private IReadOnlyList<AttachedMesh> _attached = [];
+    private readonly Dictionary<string, PixelImage?> _images = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, CubeMap?> _cubes = new(StringComparer.OrdinalIgnoreCase);
+    private int _sceneVersion;
+
+    public static IReadOnlyList<TeamColorChoice> TeamColors { get; } =
+    [
+        new("Blue", new(0.16f, 0.36f, 0.86f, 1f)),
+        new("Red", new(0.85f, 0.16f, 0.12f, 1f)),
+        new("Green", new(0.2f, 0.7f, 0.25f, 1f)),
+        new("Yellow", new(0.9f, 0.75f, 0.15f, 1f)),
+        new("Purple", new(0.55f, 0.25f, 0.8f, 1f)),
+        new("White", new(0.9f, 0.9f, 0.9f, 1f)),
+        new("None (no team colour)", new(0f, 0f, 0f, 0f)),
+    ];
+
+    public IReadOnlyList<TeamColorChoice> TeamColorChoices => TeamColors;
+    public IReadOnlyList<string> Shaders { get; private set; } = [];
+    public IReadOnlyList<string> Skyboxes { get; private set; } = [];
+    public bool UseSimpleView => !UseGameShaders;
+
+    partial void OnShaderChanged(string? value) => _ = BuildSceneAsync();
+    partial void OnSkyboxChanged(string? value) => _ = BuildSceneAsync();
+    partial void OnTeamColorChanged(TeamColorChoice value) => _ = BuildSceneAsync();
+
+    private PixelImage? Image(string fileName)
+    {
+        if (fileName.Length == 0) return null;
+        lock (_images)
+        {
+            if (_images.TryGetValue(fileName, out var cached)) return cached;
+        }
+        var image = MeshLoader.LoadTexture(_workspace, fileName);
+        lock (_images) _images[fileName] = image;
+        return image;
+    }
+
+    private CubeMap? Cube(string textureName)
+    {
+        lock (_cubes)
+        {
+            if (_cubes.TryGetValue(textureName, out var cached)) return cached;
+        }
+        CubeMap? cube = null;
+        if (_workspace.Index.Textures.TryGetValue(textureName, out var file))
+        {
+            try { cube = CubeMapLoader.Load(file.AbsolutePath); }
+            catch (Exception e) when (e is IOException or TextureLoadException) { }
+        }
+        lock (_cubes) _cubes[textureName] = cube;
+        return cube;
+    }
+
+    private IReadOnlyList<GameMaterial> GameMaterials(MeshData mesh) => mesh.Materials.Select(m => GameMaterial.From(m, Image)).ToList();
+
+    /// <summary>
+    /// Builds what the game-shader view draws: the mesh with its shader, attached particle meshes with their emitters' shaders,
+    /// textures and the skybox's environment maps. Decoding happens off the UI thread.
+    /// </summary>
+    private async Task BuildSceneAsync()
+    {
+        if (_loaded is not { } loaded || Shader is not { } shader) return;
+        int version = ++_sceneVersion;
+        string? skybox = Skybox;
+        var team = TeamColor.Color;
+        var attached = _attached;
+        bool clouds = ShowClouds;
+        var (scene, cloudPasses) = await Task.Run(() =>
+        {
+            var main = GameShaders.ForDrawing(_workspace, shader);
+            // Every pass, as the engine draws them (passes that don't apply discard themselves, e.g. by the material's
+            // Specular alpha in a mod's planet shader); the cloud layer can be left out.
+            var all = main.ShaderTechnique?.Passes.Where(p => p.HasShaders).Select(p => p.Name).ToList() ?? [];
+            var cloudNames = all.Where(n => n.Contains("Cloud", StringComparison.OrdinalIgnoreCase)).ToList();
+            HashSet<string>? chosen = clouds || cloudNames.Count == 0 ? null : [.. all.Except(cloudNames)];
+
+            var items = new List<GameSceneItem>
+            {
+                new(loaded.Data, System.Numerics.Matrix4x4.Identity, GameMaterials(loaded.Data), main, chosen, PlanetTextures(), PlanetColors()),
+            };
+            foreach (var a in attached)
+            {
+                var effect = GameShaders.ForDrawing(_workspace, a.Effect.Length > 0 ? a.Effect : GameShaders.Ship);
+                items.Add(new GameSceneItem(a.Mesh.Data, a.Placement, GameMaterials(a.Mesh.Data), effect));
+            }
+            // Compile here, off the UI thread: the renderer then finds them compiled.
+            foreach (var effect in items.Select(i => i.Effect).DistinctBy(e => e.Name))
+            {
+                try { GameShaderCompiler.Compile(effect); }
+                catch (ShaderCompileException) { }
+            }
+            var environment = skybox is null ? null : Cube(skybox + "environmentcube");
+            var irradiance = skybox is null ? null : Cube(skybox + "irradiance");
+            return (new GameScene(loaded.Data, items, environment, irradiance, team), cloudNames);
+        });
+        if (version != _sceneVersion) return;
+        if (!CloudPasses.SequenceEqual(cloudPasses)) CloudPasses = cloudPasses;
+        var notes = scene.Items.Select(i => i.Effect.Name).Distinct().ToList();
+        ShaderNote = $"Drawn with {string.Join(", ", notes)}" + (_workspace.Stack.Resolve("PipelineEffect/" + shader) is { Layer.Kind: not Core.FileSystem.LayerKind.BaseGame } f
+            ? $" (from {f.Layer.Name})" : "") + ".";
+        GameScene = scene;
+        SceneReady = true;
+    }
+
+    /// <summary>A planet's cloud and glow colours (g_CloudColor from its meshInfo with this mesh, g_GlowColor), as the engine passes them.</summary>
+    private Dictionary<string, System.Numerics.Vector4>? PlanetColors()
+    {
+        var reference = _workspace.Index.IncomingReferences(ReferenceKind.Mesh, Name).FirstOrDefault(r => r.Source.EntityType == "Planet");
+        if (reference is null) return null;
+        var lines = reference.Source.Document.Lines;
+        static uint Hex(string v) => uint.TryParse(v, System.Globalization.NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint x) ? x : 0xFFFFFFFF;
+        var colors = new Dictionary<string, System.Numerics.Vector4>();
+        // cloudColor follows the meshName in the same meshInfo block.
+        for (int i = reference.LineIndex + 1; i < lines.Count && i < reference.LineIndex + 6; i++)
+            if (lines[i].Key == "cloudColor") { colors["g_CloudColor"] = MeshMaterial.ToVector(Hex(lines[i].Value)); break; }
+        if (lines.FirstOrDefault(l => l.Key == "glowColor") is { } glow) colors["g_GlowColor"] = MeshMaterial.ToVector(Hex(glow.Value));
+        return colors;
+    }
+
+    /// <summary>A planet's cloud layer (g_TextureDiffuse2), from the first Planet entity that uses the mesh.</summary>
+    private Dictionary<string, PixelImage>? PlanetTextures()
+    {
+        var planet = _workspace.Index.IncomingReferences(ReferenceKind.Mesh, Name)
+            .Select(r => r.Source).FirstOrDefault(e => e.EntityType == "Planet");
+        if (planet?.Document.Lines.FirstOrDefault(l => l.Key == "cloudLayerTextureName") is not { } line
+            || !Core.Documents.SinsValue.TryGetString(line.Value, out var cloud) || Image(cloud) is not { } image)
+            return null;
+        return new Dictionary<string, PixelImage> { ["g_TextureDiffuse2"] = image };
+    }
+
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAttachedParticles), nameof(ScaleAlsoText))]
     private IReadOnlyList<AttachedParticleRow> _attachedParticles = [];
@@ -108,6 +281,10 @@ public sealed partial class MeshViewModel : PageViewModel
         Name = Path.GetFileNameWithoutExtension(name);
         _copyName = Name + "_Scaled";
         _unitsPerMeter = EditorSettings.Load().MeshUnitsPerMeter.ToString(CultureInfo.CurrentCulture);
+        Shaders = GameShaders.All(workspace);
+        Skyboxes = GameShaders.Skyboxes(workspace);
+        _skybox = Skyboxes.FirstOrDefault(s => s.Equals("skybox02", StringComparison.OrdinalIgnoreCase)) ?? Skyboxes.FirstOrDefault();
+        _shader = GameShaders.ForMesh(workspace, Name);
         UsedBy = workspace.Index.IncomingReferences(ReferenceKind.Mesh, Name)
             .Concat(workspace.Index.IncomingReferences(ReferenceKind.Mesh, Name + ".mesh"))
             .Select(r => new UsageRow(workspace.Index.DisplayName(r.Source) ?? r.Source.Name, $"{r.Source.Name} · {r.Key}", new EntityTarget(r.Source.Name, r.LineIndex)))
@@ -248,8 +425,11 @@ public sealed partial class MeshViewModel : PageViewModel
                 attachments.Add(new MeshAttachment(a.Mesh.Data, a.Placement, meshTextures));
             }
             Attachments = attachments;
+            _loaded = loaded;
+            _attached = attached;
             Mesh = data;
             Status = null;
+            await BuildSceneAsync();
         }
         catch (Exception e) when (e is IOException or FormatException or Core.Conversion.ConvertDataException)
         {

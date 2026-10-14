@@ -235,6 +235,14 @@ The schema says what each field means, which is what turns raw text into forms, 
   scaling takes them along: same factor for their meshes, emitter positions scaled. A scaled copy copies the particles and
   their meshes with the copy's suffix (OmegaM → OmegaM_Big: OmegaRotate_Big, OmegaR_Big) and rewrites the hardpoint
   and MeshName references, so the originals stay untouched for other users.
+- **Game shaders:** the mesh view draws with the game's own `PipelineEffect/*.fx` (a mod's versions first): ships
+  GS_ShadowedShip, asteroids GS_ShadowedAsteroid, planets GS_Planet, particle meshes their emitter's PipelineEffectID.
+  The DirectX 9 HLSL is compiled for Direct3D 11 in backwards-compatibility mode (engine defines ShadowMapCount etc. = 1;
+  pixel shaders taking VPOS get a wrapper). Constants are filled by name (camera-relative world space, as the engine
+  does; light, team colour, mesh material colours and glossiness, planet cloud/glow colours), textures by the effect's
+  sampler_state mapping (diffuse -cl with team colour mask in alpha, data -da R spec/G self-illum/B env, normal -nm
+  DXT5_NM, skybox environment and irradiance cubes, a shadow map rendered from the light, 3D noise). All passes are
+  drawn as the engine does; a mod planet shader picks its pass by the material Specular alpha.
 - Texture pages show the image (fitted or 1:1, checkerboard behind alpha) and the brushes and entities using it.
 
 ## Milestones

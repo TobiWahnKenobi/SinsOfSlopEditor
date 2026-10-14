@@ -79,8 +79,13 @@ public partial class App : Application
         if (args.Screenshot is { } file)
         {
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
-            // Some pages compute previews in the background (e.g. the brush editor).
+            // Some pages compute previews in the background (e.g. the brush editor); a mesh page compiles game shaders first.
             await Task.Delay(3000);
+            if (shell.CurrentPage is Assets.MeshViewModel mesh)
+            {
+                for (int i = 0; i < 240 && !mesh.SceneReady && mesh.Status is null or "Loading…"; i++) await Task.Delay(500);
+                await Task.Delay(1500);
+            }
             await Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
             SaveScreenshot(window, file);
             Shutdown(shell.LoadError is null ? 0 : 1);

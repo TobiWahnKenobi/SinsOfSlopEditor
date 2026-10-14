@@ -6,6 +6,9 @@
 
   <ItemGroup>
     <PackageReference Include="HelixToolkit.Wpf.SharpDX" Version="3.1.2" />
+    <!-- The game-shader view renders with Direct3D 11 itself and compiles the game's .fx code. -->
+    <PackageReference Include="SharpDX.Direct3D11" Version="4.2.0" />
+    <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0" />
   </ItemGroup>
 
   <PropertyGroup>

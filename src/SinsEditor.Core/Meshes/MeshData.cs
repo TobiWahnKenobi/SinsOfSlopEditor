@@ -3,7 +3,14 @@ using System.Numerics;
 
 namespace SinsEditor.Core.Meshes;
 
-public sealed record MeshMaterial(string Diffuse, string SelfIllumination, string Displacement, string TeamColor);
+/// <summary>A material: its textures (Displacement is the normal map) and the specular exponent the shaders use.</summary>
+public sealed record MeshMaterial(string Diffuse, string SelfIllumination, string Displacement, string TeamColor, float Glossiness = 50f,
+    uint DiffuseColor = 0xFFFFFFFF, uint AmbientColor = 0xFFFFFFFF, uint SpecularColor = 0xFFFFFFFF, uint EmissiveColor = 0xFFFFFFFF)
+{
+    /// <summary>An ARGB colour of the file (e.g. <c>ffffffff</c>) as RGBA from 0 to 1, as the shaders get it.</summary>
+    public static Vector4 ToVector(uint argb) =>
+        new(((argb >> 16) & 0xFF) / 255f, ((argb >> 8) & 0xFF) / 255f, (argb & 0xFF) / 255f, (argb >> 24) / 255f);
+}
 
 /// <summary>
 /// A hardpoint: weapons, exhausts, ability and effect attachment points (<c>Weapon-0</c>, <c>Exhaust</c>, <c>Center</c> …).
@@ -19,7 +26,7 @@ public sealed record MeshPoint(string Name, Vector3 Position, Matrix4x4 Orientat
     public string? FlairParticle => Name.StartsWith("Flair-", StringComparison.OrdinalIgnoreCase) && Name.Length > 6 ? Name[6..] : null;
 }
 
-public readonly record struct MeshVertex(Vector3 Position, Vector3 Normal, Vector2 Uv);
+public readonly record struct MeshVertex(Vector3 Position, Vector3 Normal, Vector2 Uv, Vector3 Tangent = default);
 
 public readonly record struct MeshTriangle(int A, int B, int C, int Material);
 
@@ -47,7 +54,9 @@ public sealed class MeshData
         Vector3 pointPosition = default;
         int orientationRow = -1;
         var orientation = Matrix4x4.Identity;
-        Vector3 position = default, normal = default;
+        Vector3 position = default, normal = default, tangent = default;
+        float glossiness = 50f;
+        uint diffuseColor = 0xFFFFFFFF, ambientColor = 0xFFFFFFFF, specularColor = 0xFFFFFFFF, emissiveColor = 0xFFFFFFFF;
         float u = 0, v = 0;
         bool inVertex = false;
         int a = 0, b = 0, c = 0;
@@ -56,7 +65,10 @@ public sealed class MeshData
         void FlushMaterial()
         {
             if (diffuse is null && self is null && displacement is null && team is null) return;
-            mesh.Materials.Add(new MeshMaterial(diffuse ?? "", self ?? "", displacement ?? "", team ?? ""));
+            mesh.Materials.Add(new MeshMaterial(diffuse ?? "", self ?? "", displacement ?? "", team ?? "", glossiness,
+                diffuseColor, ambientColor, specularColor, emissiveColor));
+            glossiness = 50f;
+            diffuseColor = ambientColor = specularColor = emissiveColor = 0xFFFFFFFF;
             diffuse = self = displacement = team = null;
         }
         void FlushPoint()
@@ -70,7 +82,7 @@ public sealed class MeshData
         void FlushVertex()
         {
             if (!inVertex) return;
-            mesh.Vertices.Add(new MeshVertex(position, normal, new Vector2(u, v)));
+            mesh.Vertices.Add(new MeshVertex(position, normal, new Vector2(u, v), tangent));
             inVertex = false;
             u = v = 0;
         }
@@ -107,6 +119,13 @@ public sealed class MeshData
                 case "Orientation" when section == "Point": orientationRow = 0; break;
                 case "Position": position = Vector(value); break;
                 case "Normal": normal = Vector(value); break;
+                case "Tangent": tangent = Vector(value); break;
+                case "Glossiness": glossiness = Float(value); break;
+                // Material colours (ARGB hex); a mod's planet shader picks its pass from the Specular alpha.
+                case "Diffuse" when section == "Material": diffuseColor = Hex(value); break;
+                case "Ambient" when section == "Material": ambientColor = Hex(value); break;
+                case "Specular" when section == "Material": specularColor = Hex(value); break;
+                case "Emissive" when section == "Material": emissiveColor = Hex(value); break;
                 case "U0": u = Float(value); break;
                 case "V0": v = Float(value); break;
                 case "iVertex0": a = int.Parse(value, CultureInfo.InvariantCulture); break;
@@ -125,6 +144,9 @@ public sealed class MeshData
     }
 
     internal static string Unquote(string value) => value.Length >= 2 && value[0] == '"' && value[^1] == '"' ? value[1..^1] : value;
+
+    private static uint Hex(string value) =>
+        uint.TryParse(value, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out uint v) ? v : 0xFFFFFFFF;
 
     internal static float Float(string value) => float.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture);
 
