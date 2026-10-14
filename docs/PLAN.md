@@ -230,6 +230,11 @@ The schema says what each field means, which is what turns raw text into forms, 
 - **Scaling** is by target size: a global scale (game units per meter, an editor setting) and the size the mesh should
   have along an axis (longest, length Z, width X, height Y). The factor scales vertex and hardpoint positions and the
   bounds; the result is a new mesh or replaces the mesh in the mod, in the source's format (binary via ConvertData).
+- **Attached particles:** a hardpoint `Flair-<name>` attaches `<name>.particle`; emitters with a `MeshName` show that mesh
+  at the hardpoint's placement times the emitter's (Position + Orientation). The view draws them with the main mesh, and
+  scaling takes them along: same factor for their meshes, emitter positions scaled. A scaled copy copies the particles and
+  their meshes with the copy's suffix (OmegaM → OmegaM_Big: OmegaRotate_Big, OmegaR_Big) and rewrites the hardpoint
+  and MeshName references, so the originals stay untouched for other users.
 - Texture pages show the image (fitted or 1:1, checkerboard behind alpha) and the brushes and entities using it.
 
 ## Milestones

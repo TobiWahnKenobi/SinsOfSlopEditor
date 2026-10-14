@@ -19,6 +19,14 @@ public sealed record MaterialRow(int Index, string Role, string FileName, NavTar
 
 public sealed record PointGroupRow(string Name, int Count);
 
+/// <summary>A particle a <c>Flair-</c> hardpoint attaches, with the meshes it shows.</summary>
+public sealed record MeshLink(string Name, NavTarget Target);
+
+public sealed record AttachedParticleRow(string Particle, string Meshes, IReadOnlyList<MeshLink> MeshLinks, bool Missing)
+{
+    public string Text => Missing ? $"{Particle} (missing)" : Particle;
+}
+
 public sealed record UsageRow(string Title, string Detail, NavTarget Target);
 
 /// <summary>A mesh in 3D with its textures and hardpoints, its materials, and the entities that use it.</summary>
@@ -85,6 +93,13 @@ public sealed partial class MeshViewModel : PageViewModel
     [ObservableProperty]
     private IReadOnlyList<PointGroupRow> _points = [];
 
+    [ObservableProperty]
+    private IReadOnlyList<MeshAttachment>? _attachments;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasAttachedParticles), nameof(ScaleAlsoText))]
+    private IReadOnlyList<AttachedParticleRow> _attachedParticles = [];
+
     public MeshViewModel(ModWorkspace workspace, string name, Action<NavTarget> navigate, Func<Task> reload)
     {
         _workspace = workspace;
@@ -119,6 +134,26 @@ public sealed partial class MeshViewModel : PageViewModel
 
     public string? FactorText => Factor is { } f ? $"Scale factor {f:0.####} ({MeshScaler.Size(Mesh!, Axis) * f:0.##} units)" : null;
 
+    public bool HasAttachedParticles => AttachedParticles.Count > 0;
+
+    /// <summary>What scaling takes along: attached particles and their meshes, copied with the same suffix for a copy.</summary>
+    public string? ScaleAlsoText
+    {
+        get
+        {
+            var particles = AttachedParticles.Where(p => !p.Missing).ToList();
+            if (particles.Count == 0) return null;
+            var meshes = particles.SelectMany(p => p.MeshLinks.Select(m => m.Name)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            string what = $"{string.Join(", ", particles.Select(p => p.Particle + ".particle"))}" + (meshes.Count > 0 ? $" and {string.Join(", ", meshes)}" : "");
+            return SaveAsCopy
+                ? $"Also copied and scaled with suffix {MeshScaler.CopySuffix(Name, CopyName.Trim())}: {what}."
+                : $"Also scaled in the mod: {what}. Other meshes using them change too.";
+        }
+    }
+
+    partial void OnSaveAsCopyChanged(bool value) => OnPropertyChanged(nameof(ScaleAlsoText));
+    partial void OnCopyNameChanged(string value) => OnPropertyChanged(nameof(ScaleAlsoText));
+
     public bool ReplaceInMod
     {
         get => !SaveAsCopy;
@@ -146,7 +181,7 @@ public sealed partial class MeshViewModel : PageViewModel
         IsScaling = true;
         try
         {
-            await Services.Busy.Current.RunAsync($"Scaling {Name} by {factor:0.###}…", _ => MeshScaler.ScaleAsync(_workspace, Name, factor, target));
+            await Services.Busy.Current.RunAsync($"Scaling {Name} by {factor:0.###}…", async _ => { await MeshScaler.ScaleAsync(_workspace, Name, factor, target); });
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or Core.Conversion.ConvertDataException or InvalidOperationException)
         {
@@ -194,6 +229,25 @@ public sealed partial class MeshViewModel : PageViewModel
                 .Select(m => MeshLoader.LoadTexture(_workspace, m.Diffuse) is { } image ? new MeshTexture(PngWriter.Encode(Opaque(image))) : null)
                 .ToList());
             Textures = textures;
+
+            // Particles on Flair- hardpoints, and the meshes they show, placed on the main mesh.
+            var particles = await MeshLoader.AttachedParticlesAsync(_workspace, data);
+            AttachedParticles = particles.Select(p => new AttachedParticleRow(p.Name,
+                string.Join(", ", p.MeshFileNames),
+                p.MeshFileNames.Select(m => new MeshLink(m, new MeshTarget(Path.GetFileNameWithoutExtension(m)))).ToList(),
+                p.File is null)).ToList();
+            var attached = await MeshLoader.AttachedMeshesAsync(_workspace, data);
+            var textureCache = new Dictionary<string, IReadOnlyList<MeshTexture?>>(StringComparer.OrdinalIgnoreCase);
+            var attachments = new List<MeshAttachment>();
+            foreach (var a in attached)
+            {
+                if (!textureCache.TryGetValue(a.Mesh.Name, out var meshTextures))
+                    textureCache[a.Mesh.Name] = meshTextures = await Task.Run(() => a.Mesh.Data.Materials
+                        .Select(m => MeshLoader.LoadTexture(_workspace, m.Diffuse) is { } image ? new MeshTexture(PngWriter.Encode(Opaque(image))) : null)
+                        .ToList());
+                attachments.Add(new MeshAttachment(a.Mesh.Data, a.Placement, meshTextures));
+            }
+            Attachments = attachments;
             Mesh = data;
             Status = null;
         }

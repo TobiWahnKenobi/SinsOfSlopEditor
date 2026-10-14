@@ -67,26 +67,121 @@ public static class MeshScaler
     private static string F(double value) => value.ToString("0.000000", CultureInfo.InvariantCulture);
 
     /// <summary>
-    /// Writes <paramref name="meshName"/> scaled by <paramref name="factor"/> to the mod as <paramref name="targetName"/>
-    /// (the same name overrides the mesh; another name makes a copy). Returns the written relative path.
+    /// The suffix copies of attached particles and their meshes get: what the copy's name adds to the mesh's name
+    /// (OmegaM → OmegaM_Big gives _Big), or _ plus the copy's name if it doesn't start with it.
     /// </summary>
-    public static async Task<string> ScaleAsync(ModWorkspace workspace, string meshName, float factor, string targetName, CancellationToken ct = default)
+    public static string CopySuffix(string meshName, string targetName) =>
+        targetName.StartsWith(meshName, StringComparison.OrdinalIgnoreCase) && targetName.Length > meshName.Length
+            ? targetName[meshName.Length..]
+            : "_" + targetName;
+
+    /// <summary>What scaling would write besides the mesh: attached particles and their meshes, under their new names.</summary>
+    public sealed record ScalePlan(string Mesh, IReadOnlyList<(string From, string To)> Particles, IReadOnlyList<(string From, string To)> ParticleMeshes);
+
+    public static async Task<ScalePlan> PlanAsync(ModWorkspace workspace, MeshData mesh, string meshName, string targetName, bool copy, CancellationToken ct = default)
+    {
+        string suffix = copy ? CopySuffix(meshName, targetName) : "";
+        var attached = (await MeshLoader.AttachedParticlesAsync(workspace, mesh, ct)).Where(a => a.File != null).ToList();
+        var particles = attached.Select(a => (a.Name, a.Name + suffix)).ToList();
+        var meshes = attached.SelectMany(a => a.MeshFileNames).Select(Path.GetFileNameWithoutExtension).OfType<string>()
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Where(m => workspace.Index.Meshes.ContainsKey(m))
+            .Select(m => (m, m + suffix)).ToList();
+        return new ScalePlan(targetName, particles, meshes);
+    }
+
+    /// <summary>
+    /// Writes <paramref name="meshName"/> scaled by <paramref name="factor"/> to the mod as <paramref name="targetName"/>
+    /// (the same name overrides the mesh; another name makes a copy). Particles attached through <c>Flair-</c> hardpoints
+    /// go along: their meshes get the same factor and their emitters' positions scale too. A copy copies them with the
+    /// same suffix and points its hardpoints and emitters at the copies, so the originals stay as they are for others.
+    /// Returns the written relative paths.
+    /// </summary>
+    public static async Task<IReadOnlyList<string>> ScaleAsync(ModWorkspace workspace, string meshName, float factor, string targetName,
+        CancellationToken ct = default)
     {
         if (!(factor > 0) || float.IsInfinity(factor)) throw new ArgumentOutOfRangeException(nameof(factor), "The factor must be a positive number.");
         var mod = workspace.Stack.EditedMod ?? throw new InvalidOperationException("No mod is open for editing.");
-        if (!workspace.Index.Meshes.TryGetValue(Path.GetFileNameWithoutExtension(meshName), out var source))
-            throw new InvalidOperationException($"Mesh '{meshName}' doesn't exist.");
+        string key = Path.GetFileNameWithoutExtension(meshName);
+        if (!workspace.Index.Meshes.TryGetValue(key, out var source)) throw new InvalidOperationException($"Mesh '{meshName}' doesn't exist.");
+        bool copy = !string.Equals(key, targetName, StringComparison.OrdinalIgnoreCase);
 
         var doc = SinsDocument.Load(await workspace.Cache.GetTextPathAsync(source.AbsolutePath, ct));
-        Scale(doc, factor);
+        var plan = await PlanAsync(workspace, MeshData.Parse(doc.Lines.Select(l => l.Text)), key, targetName, copy, ct);
+        if (copy)
+        {
+            var taken = plan.Particles.Where(p => workspace.Index.Particles.ContainsKey(p.To)).Select(p => p.To + ".particle")
+                .Concat(plan.ParticleMeshes.Where(m => workspace.Index.Meshes.ContainsKey(m.To)).Select(m => m.To + ".mesh")).ToList();
+            if (taken.Count > 0) throw new InvalidOperationException($"These already exist: {string.Join(", ", taken)}. Choose another name.");
+        }
 
-        string relative = $"Mesh/{targetName}{Path.GetExtension(source.RelativePath)}";
+        var written = new List<string>();
+        Scale(doc, factor);
+        var renamedParticles = plan.Particles.ToDictionary(p => p.From, p => p.To, StringComparer.OrdinalIgnoreCase);
+        if (copy)
+        {
+            foreach (var line in doc.Lines.Where(l => l.Key == "DataString"))
+            {
+                if (SinsValue.TryGetString(line.Value, out var point) && point.StartsWith("Flair-", StringComparison.OrdinalIgnoreCase)
+                    && renamedParticles.TryGetValue(point[6..], out var to))
+                    line.SetRawValue(SinsValue.FormatString("Flair-" + to));
+            }
+        }
+        written.Add(await WriteLikeAsync(workspace, doc, source, $"Mesh/{targetName}{Path.GetExtension(source.RelativePath)}", ct));
+
+        var renamedMeshes = plan.ParticleMeshes.ToDictionary(m => m.From, m => m.To, StringComparer.OrdinalIgnoreCase);
+        foreach (var (from, to) in plan.Particles)
+        {
+            var file = workspace.Index.Particles[from];
+            var particle = SinsDocument.Load(await workspace.Cache.GetTextPathAsync(file.AbsolutePath, ct));
+            ScaleParticle(particle, factor, renamedMeshes);
+            written.Add(await WriteLikeAsync(workspace, particle, file, $"Particle/{to}{Path.GetExtension(file.RelativePath)}", ct));
+        }
+        foreach (var (from, to) in plan.ParticleMeshes)
+        {
+            var file = workspace.Index.Meshes[from];
+            var mesh = SinsDocument.Load(await workspace.Cache.GetTextPathAsync(file.AbsolutePath, ct));
+            Scale(mesh, factor);
+            written.Add(await WriteLikeAsync(workspace, mesh, file, $"Mesh/{to}{Path.GetExtension(file.RelativePath)}", ct));
+        }
+        mod.Refresh();
+        return written;
+    }
+
+    /// <summary>
+    /// Scales where a particle's emitters sit (their first Position) and points mesh emitters at renamed meshes.
+    /// The meshes themselves are scaled separately.
+    /// </summary>
+    public static void ScaleParticle(SinsDocument doc, float factor, IReadOnlyDictionary<string, string> renamedMeshes)
+    {
+        bool inEmitter = false, positioned = false;
+        foreach (var line in doc.Lines)
+        {
+            switch (line.Key)
+            {
+                case "EmitterContents": inEmitter = true; positioned = false; break;
+                case "NumAffectors": inEmitter = false; break;
+                case "Position" when inEmitter && !positioned && SinsValue.TryGetVector(line.Value, out var v) && v.Length == 3:
+                    line.SetRawValue($"[ {F(v[0] * factor)} {F(v[1] * factor)} {F(v[2] * factor)} ]");
+                    positioned = true;
+                    break;
+                case "MeshName" when inEmitter && SinsValue.TryGetString(line.Value, out var mesh) && mesh.Length > 0
+                                     && renamedMeshes.TryGetValue(Path.GetFileNameWithoutExtension(mesh), out var to):
+                    line.SetRawValue(SinsValue.FormatString(to + Path.GetExtension(mesh)));
+                    break;
+            }
+        }
+    }
+
+    /// <summary>Writes a document into the mod in the same format as <paramref name="source"/> (binary through ConvertData).</summary>
+    private static async Task<string> WriteLikeAsync(ModWorkspace workspace, SinsDocument doc, FileSystem.ResolvedFile source, string relative, CancellationToken ct)
+    {
+        var mod = workspace.Stack.EditedMod!;
         string target = Path.Combine(mod.RootPath, relative.Replace('/', Path.DirectorySeparatorChar));
         Directory.CreateDirectory(Path.GetDirectoryName(target)!);
-        bool binary = SinsFileFormatDetector.Detect(source.AbsolutePath) == SinsFileFormat.Binary;
-        if (binary)
+        if (SinsFileFormatDetector.Detect(source.AbsolutePath) == SinsFileFormat.Binary)
         {
-            string text = Path.Combine(Path.GetTempPath(), "SinsEditor", Guid.NewGuid().ToString("N") + ".mesh");
+            string text = Path.Combine(Path.GetTempPath(), "SinsEditor", Guid.NewGuid().ToString("N") + Path.GetExtension(relative));
             string temp = target + SafeWrite.TempSuffix;
             Directory.CreateDirectory(Path.GetDirectoryName(text)!);
             try
@@ -106,7 +201,6 @@ public static class MeshScaler
             doc.ApplyConvention(ConventionCheck.ExpectedConvention(workspace.Stack, relative, doc.HasNonAsciiText));
             SafeWrite.Text(doc, target);
         }
-        mod.Refresh();
         return relative;
     }
 }

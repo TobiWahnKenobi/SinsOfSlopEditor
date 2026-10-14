@@ -49,6 +49,31 @@
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
 
+                <StackPanel Visibility="{Binding HasAttachedParticles, Converter={StaticResource BoolToVisibility}}">
+                    <TextBlock Text="Attached particles" Style="{StaticResource SectionHeader}" />
+                    <ItemsControl ItemsSource="{Binding AttachedParticles}" Margin="0,0,0,12">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="{x:Type assets:AttachedParticleRow}">
+                                <StackPanel Margin="0,2">
+                                    <TextBlock Text="{Binding Text}" />
+                                    <ItemsControl ItemsSource="{Binding MeshLinks}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <TextBlock Margin="12,0,0,0" FontSize="12">
+                                                    <Hyperlink Command="{Binding DataContext.OpenCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                               CommandParameter="{Binding Target}">
+                                                        <Run Text="{Binding Name, Mode=OneWay}" />
+                                                    </Hyperlink>
+                                                </TextBlock>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
                 <TextBlock Text="Scale" Style="{StaticResource SectionHeader}" />
                 <Grid Margin="0,0,0,4">
                     <Grid.ColumnDefinitions>
@@ -81,6 +106,8 @@
                 <TextBox Text="{Binding CopyName, UpdateSourceTrigger=PropertyChanged}" Margin="24,2,0,4" IsEnabled="{Binding SaveAsCopy}" />
                 <RadioButton Content="Replace this mesh in the mod" GroupName="ScaleTarget"
                              IsChecked="{Binding ReplaceInMod}" Margin="0,0,0,6" />
+                <TextBlock Text="{Binding ScaleAlsoText}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,6"
+                           Visibility="{Binding ScaleAlsoText, Converter={StaticResource NullToCollapsed}}" />
                 <TextBlock Text="{Binding ScaleError}" Foreground="{StaticResource ErrorBrush}" TextWrapping="Wrap" Margin="0,0,0,6"
                            Visibility="{Binding ScaleError, Converter={StaticResource NullToCollapsed}}" />
                 <Button Content="Scale" Command="{Binding ScaleCommand}" IsEnabled="{Binding CanScale}" HorizontalAlignment="Left" MinWidth="100" Margin="0,0,0,16" />
@@ -107,7 +134,7 @@
 
         <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
 
-        <viewer:MeshViewport Grid.Column="2" Mesh="{Binding Mesh}" Textures="{Binding Textures}"
+        <viewer:MeshViewport Grid.Column="2" Mesh="{Binding Mesh}" Textures="{Binding Textures}" Attachments="{Binding Attachments}"
                              ShowPoints="{Binding ShowPoints}" ShowWireframe="{Binding ShowWireframe}" />
     </Grid>
 </UserControl>

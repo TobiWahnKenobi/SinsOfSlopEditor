@@ -14,6 +14,9 @@ namespace SinsEditor.Viewer;
 /// <summary>A textured image for a material: PNG (or DDS) bytes, as HelixToolkit loads them.</summary>
 public sealed record MeshTexture(byte[] Bytes);
 
+/// <summary>Another mesh shown with the main one (e.g. a particle's mesh on a <c>Flair-</c> hardpoint), placed in its space.</summary>
+public sealed record MeshAttachment(MeshData Mesh, Matrix4x4 Placement, IReadOnlyList<MeshTexture?> Textures);
+
 /// <summary>
 /// Shows a Sins mesh with its diffuse textures and, optionally, its hardpoints as coloured markers
 /// (weapons red, exhausts blue, everything else yellow). Mouse: right-drag rotates, wheel zooms, middle-drag pans.
@@ -31,6 +34,9 @@ public partial class MeshViewport : UserControl
 
     public static readonly DependencyProperty ShowWireframeProperty = DependencyProperty.Register(nameof(ShowWireframe), typeof(bool), typeof(MeshViewport),
         new PropertyMetadata(false, (d, _) => ((MeshViewport)d).Rebuild()));
+
+    public static readonly DependencyProperty AttachmentsProperty = DependencyProperty.Register(nameof(Attachments), typeof(IReadOnlyList<MeshAttachment>),
+        typeof(MeshViewport), new PropertyMetadata(null, (d, _) => ((MeshViewport)d).Rebuild()));
 
     private static readonly IEffectsManager Effects = new DefaultEffectsManager();
 
@@ -53,6 +59,13 @@ public partial class MeshViewport : UserControl
         set => SetValue(TexturesProperty, value);
     }
 
+    /// <summary>Meshes shown along with <see cref="Mesh"/>, in its coordinate space.</summary>
+    public IReadOnlyList<MeshAttachment>? Attachments
+    {
+        get => (IReadOnlyList<MeshAttachment>?)GetValue(AttachmentsProperty);
+        set => SetValue(AttachmentsProperty, value);
+    }
+
     public bool ShowPoints
     {
         get => (bool)GetValue(ShowPointsProperty);
@@ -71,10 +84,17 @@ public partial class MeshViewport : UserControl
     {
         Models.Children.Clear();
         if (Mesh is not { } mesh || mesh.Vertices.Count == 0) return;
+        AddMesh(mesh, Textures, Matrix4x4.Identity);
+        foreach (var attachment in Attachments ?? []) AddMesh(attachment.Mesh, attachment.Textures, attachment.Placement);
 
+        AddPoints(mesh);
+        if (_framedMesh != mesh) FrameMesh(mesh);
+    }
 
-        var positions = new Vector3Collection(mesh.Vertices.Select(v => Flip(v.Position)));
-        var normals = new Vector3Collection(mesh.Vertices.Select(v => Flip(v.Normal)));
+    private void AddMesh(MeshData mesh, IReadOnlyList<MeshTexture?>? textures, Matrix4x4 placement)
+    {
+        var positions = new Vector3Collection(mesh.Vertices.Select(v => Flip(Vector3.Transform(v.Position, placement))));
+        var normals = new Vector3Collection(mesh.Vertices.Select(v => v.Normal == Vector3.Zero ? v.Normal : Flip(Vector3.Normalize(Vector3.TransformNormal(v.Normal, placement)))));
         var uvs = new Vector2Collection(mesh.Vertices.Select(v => v.Uv));
 
         foreach (var group in mesh.Triangles.GroupBy(t => t.Material).OrderBy(g => g.Key))
@@ -95,7 +115,7 @@ public partial class MeshViewport : UserControl
                 SpecularColor = new Color4(0.25f, 0.25f, 0.25f, 1f),
                 SpecularShininess = 30f,
             };
-            if (Textures is { } textures && group.Key < textures.Count && textures[group.Key] is { } texture)
+            if (textures != null && group.Key < textures.Count && textures[group.Key] is { } texture)
                 material.DiffuseMap = TextureModel.Create(new System.IO.MemoryStream(texture.Bytes));
             else
                 material.DiffuseColor = new Color4(0.62f, 0.64f, 0.7f, 1f);
@@ -108,7 +128,10 @@ public partial class MeshViewport : UserControl
                 WireframeColor = Media.Color.FromRgb(90, 200, 255),
             });
         }
+    }
 
+    private void AddPoints(MeshData mesh)
+    {
         if (ShowPoints && mesh.Points.Count > 0)
         {
             float size = Math.Max(0.4f, mesh.BoundingRadius / 60f);
@@ -134,7 +157,6 @@ public partial class MeshViewport : UserControl
                 });
             }
         }
-        if (_framedMesh != mesh) FrameMesh(mesh);
     }
 
     private MeshData? _framedMesh;

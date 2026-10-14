@@ -5,8 +5,18 @@ namespace SinsEditor.Core.Meshes;
 
 public sealed record MeshMaterial(string Diffuse, string SelfIllumination, string Displacement, string TeamColor);
 
-/// <summary>A hardpoint: weapons, exhausts, ability and effect attachment points (<c>Weapon-0</c>, <c>Exhaust</c>, <c>Center</c> …).</summary>
-public sealed record MeshPoint(string Name, Vector3 Position, Vector3 Forward);
+/// <summary>
+/// A hardpoint: weapons, exhausts, ability and effect attachment points (<c>Weapon-0</c>, <c>Exhaust</c>, <c>Center</c> …).
+/// <paramref name="Orientation"/> holds the three rows of the file's orientation matrix as its first three rows
+/// (row 1 is the forward direction); <c>Flair-&lt;particle&gt;</c> points attach a particle with it.
+/// </summary>
+public sealed record MeshPoint(string Name, Vector3 Position, Matrix4x4 Orientation)
+{
+    public Vector3 Forward => new(Orientation.M11, Orientation.M12, Orientation.M13);
+
+    /// <summary>The particle a <c>Flair-</c> point attaches, if it is one.</summary>
+    public string? FlairParticle => Name.StartsWith("Flair-", StringComparison.OrdinalIgnoreCase) && Name.Length > 6 ? Name[6..] : null;
+}
 
 public readonly record struct MeshVertex(Vector3 Position, Vector3 Normal, Vector2 Uv);
 
@@ -35,7 +45,7 @@ public sealed class MeshData
         string? pointName = null;
         Vector3 pointPosition = default;
         int orientationRow = -1;
-        Vector3 forward = default;
+        var orientation = Matrix4x4.Identity;
         Vector3 position = default, normal = default;
         float u = 0, v = 0;
         bool inVertex = false;
@@ -51,9 +61,10 @@ public sealed class MeshData
         void FlushPoint()
         {
             if (pointName is null) return;
-            mesh.Points.Add(new MeshPoint(pointName, pointPosition, forward));
+            mesh.Points.Add(new MeshPoint(pointName, pointPosition, orientation));
             pointName = null;
-            pointPosition = forward = default;
+            pointPosition = default;
+            orientation = Matrix4x4.Identity;
         }
         void FlushVertex()
         {
@@ -67,10 +78,10 @@ public sealed class MeshData
         {
             string line = raw.Trim();
             if (line.Length == 0) continue;
-            // Orientation rows: three vectors on their own lines; the first is the point's forward direction.
+            // Orientation rows: three vectors on their own lines.
             if (line[0] == '[')
             {
-                if (orientationRow == 0) forward = Vector(line);
+                if (orientationRow >= 0) orientation = MeshMath.WithRow(orientation, orientationRow, Vector(line));
                 if (orientationRow >= 0 && ++orientationRow == 3) orientationRow = -1;
                 continue;
             }
@@ -112,11 +123,11 @@ public sealed class MeshData
         return mesh;
     }
 
-    private static string Unquote(string value) => value.Length >= 2 && value[0] == '"' && value[^1] == '"' ? value[1..^1] : value;
+    internal static string Unquote(string value) => value.Length >= 2 && value[0] == '"' && value[^1] == '"' ? value[1..^1] : value;
 
-    private static float Float(string value) => float.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture);
+    internal static float Float(string value) => float.Parse(value, NumberStyles.Float, CultureInfo.InvariantCulture);
 
-    private static Vector3 Vector(string value)
+    internal static Vector3 Vector(string value)
     {
         var parts = value.Trim('[', ']', ' ').Split(' ', StringSplitOptions.RemoveEmptyEntries);
         return parts.Length >= 3 ? new Vector3(Float(parts[0]), Float(parts[1]), Float(parts[2])) : default;

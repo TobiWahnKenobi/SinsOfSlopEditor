@@ -63,7 +63,7 @@ public sealed class MeshTests : IAsyncLifetime
         Assert.Null(MeshScaler.ValidateName(ws, name + "_Big", isCopy: true));
         Assert.NotNull(MeshScaler.ValidateName(ws, name, isCopy: true));
 
-        string path = await MeshScaler.ScaleAsync(ws, name, 1.5f, name + "_Big");
+        string path = (await MeshScaler.ScaleAsync(ws, name, 1.5f, name + "_Big"))[0];
         Assert.Equal(SinsFileFormat.Binary, SinsFileFormatDetector.Detect(Path.Combine(_mod, path)));
 
         var after = await Open();

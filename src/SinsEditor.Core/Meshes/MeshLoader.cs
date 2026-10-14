@@ -1,9 +1,19 @@
+using System.Numerics;
 using SinsEditor.Core.FileSystem;
 using SinsEditor.Core.Textures;
 
 namespace SinsEditor.Core.Meshes;
 
 public sealed record LoadedMesh(string Name, ResolvedFile File, MeshData Data);
+
+/// <summary>
+/// A mesh shown by a particle that a <c>Flair-</c> hardpoint attaches: where it sits relative to the main mesh
+/// (hardpoint placement times emitter placement), and what it came from.
+/// </summary>
+public sealed record AttachedMesh(string PointName, string Particle, ResolvedFile ParticleFile, string MeshFileName, LoadedMesh Mesh, Matrix4x4 Placement);
+
+/// <summary>A particle attached through a <c>Flair-</c> hardpoint, and the meshes its emitters show.</summary>
+public sealed record AttachedParticle(string Name, ResolvedFile? File, IReadOnlyList<string> MeshFileNames);
 
 public static class MeshLoader
 {
@@ -15,6 +25,48 @@ public static class MeshLoader
         string text = await workspace.Cache.GetTextPathAsync(file.AbsolutePath, ct);
         var data = await Task.Run(() => MeshData.Load(text), ct);
         return new LoadedMesh(key, file, data);
+    }
+
+    /// <summary>The particles the mesh's <c>Flair-</c> hardpoints attach (each once), with the meshes they show.</summary>
+    public static async Task<IReadOnlyList<AttachedParticle>> AttachedParticlesAsync(ModWorkspace workspace, MeshData mesh, CancellationToken ct = default)
+    {
+        var result = new List<AttachedParticle>();
+        foreach (string name in mesh.Points.Select(p => p.FlairParticle).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            var file = workspace.Index.Particles.GetValueOrDefault(name);
+            var meshes = file is null ? [] : (await LoadParticleAsync(workspace, file, ct)).Emitters
+                .Select(e => e.MeshName).Where(m => m.Length > 0).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+            result.Add(new AttachedParticle(name, file, meshes));
+        }
+        return result;
+    }
+
+    /// <summary>Every particle mesh attached to the mesh, placed relative to it; missing particles and meshes are skipped.</summary>
+    public static async Task<IReadOnlyList<AttachedMesh>> AttachedMeshesAsync(ModWorkspace workspace, MeshData mesh, CancellationToken ct = default)
+    {
+        var result = new List<AttachedMesh>();
+        var particles = new Dictionary<string, ParticleData>(StringComparer.OrdinalIgnoreCase);
+        var meshes = new Dictionary<string, LoadedMesh?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var point in mesh.Points)
+        {
+            if (point.FlairParticle is not { } name || workspace.Index.Particles.GetValueOrDefault(name) is not { } file) continue;
+            if (!particles.TryGetValue(name, out var particle)) particles[name] = particle = await LoadParticleAsync(workspace, file, ct);
+            var pointPlacement = MeshMath.Placement(point.Orientation, point.Position);
+            foreach (var emitter in particle.Emitters.Where(e => e.MeshName.Length > 0))
+            {
+                if (!meshes.TryGetValue(emitter.MeshName, out var loaded)) meshes[emitter.MeshName] = loaded = await LoadAsync(workspace, emitter.MeshName, ct);
+                if (loaded is null) continue;
+                var placement = MeshMath.Placement(emitter.Orientation, emitter.Position) * pointPlacement;
+                result.Add(new AttachedMesh(point.Name, name, file, emitter.MeshName, loaded, placement));
+            }
+        }
+        return result;
+    }
+
+    public static async Task<ParticleData> LoadParticleAsync(ModWorkspace workspace, ResolvedFile file, CancellationToken ct = default)
+    {
+        string text = await workspace.Cache.GetTextPathAsync(file.AbsolutePath, ct);
+        return await Task.Run(() => ParticleData.Load(text), ct);
     }
 
     /// <summary>A texture a mesh names (file names carry an extension, the index doesn't).</summary>
