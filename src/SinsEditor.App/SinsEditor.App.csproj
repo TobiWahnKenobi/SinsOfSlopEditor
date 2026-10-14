@@ -21,7 +21,7 @@
     <AssemblyName>SinsOfSlopEditor</AssemblyName>
     <RootNamespace>SinsEditor.App</RootNamespace>
     <Product>Sins of Slop Editor</Product>
-    <Version>0.1.0</Version>
+    <Version>0.2.0</Version>
     <Company>lt-design</Company>
     <Copyright>© Tobias Liebhart / lt-design</Copyright>
     <TargetFramework>net9.0-windows</TargetFramework>
