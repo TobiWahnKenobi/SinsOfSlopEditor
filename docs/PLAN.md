@@ -252,6 +252,30 @@ The schema says what each field means, which is what turns raw text into forms, 
     atmosphere halo on engine-built geometry, neither drawn yet. Depth range is fitted around the model.
 - Texture pages show the image (fitted or 1:1, checkerboard behind alpha) and the brushes and entities using it.
 
+### Mesh viewer: next round (planned, not started)
+
+1. **Particle start:** effects now start with a random emission phase per hardpoint (the first particle of an emitter
+   comes at a random moment within its first emit interval), so copies on different hardpoints don't blink in step.
+   Emitter `StartTime` is honoured, but the random phase shifts emission on top of it. Change: start every emitter
+   exactly at its `StartTime` with the accumulator at zero, as the files say; keep a per-hardpoint offset only if the
+   game does that (verify in game), otherwise drop it.
+2. **Blinking lights:** check that blink effects (low emit rate, short-lived particles, `hasEmitIntervals`,
+   Color/SizeOscillator) still blink: since the random phase, they may only seem steady, or a ship's lights may be
+   steady by design. Find a ship with known blinking lights, compare the simulation over time with the game, and add a
+   test that its particle count / alpha goes up and down.
+3. **Per-tab view state:** switching tabs rebuilds the mesh page and resets camera, playback time and settings. Keep
+   per tab (until the tab or app closes, nothing on disk): camera (target, yaw, pitch, distance), FOV, playback time,
+   playing/paused, speed, and the view settings (shader, skybox, team colour, star distance, backdrop, clouds,
+   particles, hardpoints, wireframe, background, picture settings). Either keep the view model alive with the tab, or
+   save a state record on unload and restore it on load.
+4. **FOV slider:** field of view (e.g. 10°–120°, default 45°) in the view settings; framing and picture export use it.
+5. **View palette:** a panel that slides in from the right edge of the viewer, with:
+   - reset view, top-down, (optionally front / side / back);
+   - rotate by x degrees around the X, Y or Z axis (number + axis choice + button, both directions);
+   - move by x units along the X, Y or Z axis;
+   - **stored views:** save the current camera position/rotation, FOV, playback time (and playing state) under a name;
+     a list to restore one; delete entries. Stored views are per editor (editor settings, by mesh name), not in the mod.
+
 ## Milestones
 
 | # | Milestone | Done when |
