@@ -568,7 +568,7 @@ public sealed class GameRenderer : IDisposable
 
         // The light: above, in front and to the left of the ship, fixed in the world so turning the model shows its shading.
         var lightDirection = Vector3.Normalize(new Vector3(-0.6f, 0.9f, 0.8f));
-        var lightPosition = center + lightDirection * radius * 50;
+        var lightPosition = center + lightDirection * Math.Max(radius * 50, scene?.StarDistance ?? 100_000f);
         var lightView = LookAtLH(center + lightDirection * radius * 3, center, Math.Abs(lightDirection.Y) > 0.99f ? Vector3.UnitZ : Vector3.UnitY);
         var lightProjection = OrthoLH(radius * 2.2f, radius * 2.2f, 0, radius * 6);
         var shadowBias = new Matrix4x4(0.5f, 0, 0, 0, 0, -0.5f, 0, 0, 0, 0, 1, 0, 0.5f, 0.5f, 0, 1);

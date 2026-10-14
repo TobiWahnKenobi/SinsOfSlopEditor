@@ -35,6 +35,12 @@ public sealed record TeamColorChoice(string Name, System.Numerics.Vector4 Color)
     public override string ToString() => Name;
 }
 
+/// <summary>How far the star is: PBR shaders light ships much brighter close to a star.</summary>
+public sealed record StarDistanceChoice(string Name, float Distance)
+{
+    public override string ToString() => Name;
+}
+
 /// <summary>A mesh in 3D with its textures and hardpoints, its materials, and the entities that use it.</summary>
 public sealed partial class MeshViewModel : PageViewModel
 {
@@ -119,6 +125,20 @@ public sealed partial class MeshViewModel : PageViewModel
 
     [ObservableProperty]
     private TeamColorChoice _teamColor = TeamColors[0];
+
+    [ObservableProperty]
+    private StarDistanceChoice _starDistance = StarDistances[1];
+
+    public static IReadOnlyList<StarDistanceChoice> StarDistances { get; } =
+    [
+        new("Near the star (40,000)", 40_000f),
+        new("Mid-system (100,000)", 100_000f),
+        new("Far out (250,000)", 250_000f),
+    ];
+
+    public IReadOnlyList<StarDistanceChoice> StarDistanceChoices => StarDistances;
+
+    partial void OnStarDistanceChanged(StarDistanceChoice value) => _ = BuildSceneAsync();
 
     [ObservableProperty]
     private string? _shaderNote;
@@ -209,6 +229,7 @@ public sealed partial class MeshViewModel : PageViewModel
         int version = ++_sceneVersion;
         string? skybox = Skybox;
         var team = TeamColor.Color;
+        float starDistance = StarDistance.Distance;
         var attached = _attached;
         bool clouds = ShowClouds;
         // The skybox backdrop mesh belonging to the environment maps: skybox02 → SkyboxBackdrop2.
@@ -249,7 +270,7 @@ public sealed partial class MeshViewModel : PageViewModel
                 catch (ShaderCompileException) { }
                 sky = new GameSceneItem(backdrop.Data, System.Numerics.Matrix4x4.Identity, GameMaterials(backdrop.Data), skyEffect);
             }
-            return (new GameScene(loaded.Data, items, environment, irradiance, team, sky), cloudNames);
+            return (new GameScene(loaded.Data, items, environment, irradiance, team, sky, starDistance), cloudNames);
         });
         if (version != _sceneVersion) return;
         if (!CloudPasses.SequenceEqual(cloudPasses)) CloudPasses = cloudPasses;

@@ -29,9 +29,14 @@ public sealed record GameSceneItem(MeshData Mesh, Matrix4x4 Placement, IReadOnly
     IReadOnlyDictionary<string, Vector4>? Constants = null);
 
 /// <summary>Everything the game-shader view draws: the meshes, the skybox's environment maps and the team colour.</summary>
-/// <remarks><paramref name="Skybox"/> is the skybox backdrop mesh, drawn first around the camera without depth.</remarks>
+/// <remarks>
+/// <paramref name="Skybox"/> is the skybox backdrop mesh, drawn first around the camera without depth.
+/// <paramref name="StarDistance"/> is how far the light (the star) is, in game units: the base game's shaders only use its
+/// direction, but PBR shaders brighten the light near a star (SinsRemastered: radius 25,000, up to 8× intensity), so a light
+/// placed close to the model makes everything white.
+/// </remarks>
 public sealed record GameScene(MeshData Primary, IReadOnlyList<GameSceneItem> Items, CubeMap? Environment, CubeMap? Irradiance, Vector4 TeamColor,
-    GameSceneItem? Skybox = null);
+    GameSceneItem? Skybox = null, float StarDistance = 100_000f);
 
 /// <summary>Where the camera looks from: an orbit around <see cref="Target"/> in game space (left-handed, ships face +Z).</summary>
 public record struct OrbitCamera(Vector3 Target, float Yaw, float Pitch, float Distance)

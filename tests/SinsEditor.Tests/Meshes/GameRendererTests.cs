@@ -109,4 +109,47 @@ public sealed class GameRendererTests(ITestOutputHelper output) : IAsyncLifetime
             PngWriter.Save(new PixelImage(400, 300, pixels), Path.Combine(Path.GetDirectoryName(dir)!, "render_skybox.png"));
         }
     }
+
+    [SkippableFact]
+    public async Task Skybox_changes_the_ships_reflections()
+    {
+        string ai = Path.Combine(Path.GetDirectoryName(TestPaths.TestMod ?? "")!, "SinsRemasteredAI");
+        Skip.If(TestPaths.GameDir is null || !Directory.Exists(ai), "SinsRemasteredAI not found.");
+        var ws = await ModWorkspace.OpenAsync(new WorkspaceOptions(TestPaths.GameDir!, _mod, [ai], "English"),
+            cacheRoot: Path.Combine(Path.GetTempPath(), "SinsEditorTests", "cache"));
+        var mesh = (await MeshLoader.LoadAsync(ws, "Frigate_PhaseAntiFighter"))!.Data;
+        var materials = mesh.Materials.Select(m => GameMaterial.From(m, n => MeshLoader.LoadTexture(ws, n))).ToList();
+        var effect = GameShaders.ForDrawing(ws, "GS_ShadowedShip.fx");
+        output.WriteLine($"skyboxes: {string.Join(", ", GameShaders.Skyboxes(ws))}");
+        CubeMap? Cube(string n)
+        {
+            if (!ws.Index.Textures.TryGetValue(n, out var f)) { output.WriteLine($"{n}: not found"); return null; }
+            var c = CubeMapLoader.Load(f.AbsolutePath);
+            long sum = 0; foreach (var face in c.Faces) foreach (var b in face.Bgra) sum += b;
+            output.WriteLine($"{n}: {f.Layer.Name} {c.Size}px, mean {sum / (6.0 * c.Faces[0].Bgra.Length):0.0}");
+            return c;
+        }
+        byte[] Render(string sky)
+        {
+            var scene = new GameScene(mesh, [new GameSceneItem(mesh, System.Numerics.Matrix4x4.Identity, materials, effect)],
+                Cube(sky + "environmentcube"), Cube(sky + "irradiance"), new(0.2f, 0.4f, 0.9f, 1));
+            using var renderer = new GameRenderer();
+            renderer.SetScene(scene);
+            return renderer.Render(400, 300, OrbitCamera.Frame(mesh), new GameRenderOptions(false, false));
+        }
+        var a = Render("skybox02");
+        var b = Render("skybox06");
+        if (Environment.GetEnvironmentVariable("SINSEDITOR_REPORT") is { } dir)
+            foreach (var (name, px) in new[] { ("02", a), ("06", b) })
+            {
+                var copy = (byte[])px.Clone();
+                for (int i = 3; i < copy.Length; i += 4) copy[i] = 255;
+                PngWriter.Save(new PixelImage(400, 300, copy), Path.Combine(Path.GetDirectoryName(dir)!, $"render_sky{name}.png"));
+            }
+        long diff = 0;
+        for (int i = 0; i < a.Length; i++) diff += Math.Abs(a[i] - b[i]);
+        output.WriteLine($"mean pixel difference between skyboxes: {diff / (double)a.Length:0.00}");
+        // The ship covers about a tenth of the picture; with the light inside the star's radius everything saturated (0.03).
+        Assert.True(diff / (double)a.Length > 0.15, "the skybox has no effect on the ship");
+    }
 }

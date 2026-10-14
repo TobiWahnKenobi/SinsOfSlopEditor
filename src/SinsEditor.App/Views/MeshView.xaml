@@ -30,6 +30,7 @@
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <TextBlock Text="Shader" VerticalAlignment="Center" />
                     <ComboBox Grid.Column="1" ItemsSource="{Binding Shaders}" SelectedItem="{Binding Shader}" Margin="0,2" />
@@ -38,6 +39,9 @@
                               ToolTip="The environment and irradiance cube maps the ship reflects and is lit by" />
                     <TextBlock Grid.Row="2" Text="Team colour" VerticalAlignment="Center" />
                     <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding TeamColorChoices}" SelectedItem="{Binding TeamColor}" Margin="0,2" />
+                    <TextBlock Grid.Row="3" Text="Star distance" VerticalAlignment="Center" />
+                    <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding StarDistanceChoices}" SelectedItem="{Binding StarDistance}" Margin="0,2"
+                              ToolTip="Where the light comes from. Remastered's PBR shaders light ships brighter close to a star." />
                 </Grid>
                 <CheckBox Content="Skybox backdrop" IsChecked="{Binding ShowSkybox}" Margin="0,0,0,4"
                           Visibility="{Binding UseGameShaders, Converter={StaticResource BoolToVisibility}}" />
