@@ -243,6 +243,13 @@ The schema says what each field means, which is what turns raw text into forms, 
   sampler_state mapping (diffuse -cl with team colour mask in alpha, data -da R spec/G self-illum/B env, normal -nm
   DXT5_NM, skybox environment and irradiance cubes, a shadow map rendered from the light, 3D noise). All passes are
   drawn as the engine does; a mod planet shader picks its pass by the material Specular alpha.
+  - Normal maps come from the material's NormalTextureFileName (DisplacementTextureFileName is a separate, rarely used slot).
+  - Direct3D 9 vs 11 differences handled when compiling: pixel inputs are linked by register in Direct3D 11, so pixel
+    shaders with plain parameters that leave out the position get a wrapper taking the vertex outputs in order; loops with
+    an int counter are capped at 255 iterations like shader model 3 hardware (a NaN bound otherwise hangs the GPU).
+  - The skybox backdrop (SkyboxBackdropN mesh with GS_Skybox) is drawn first around the camera, without depth or culling.
+  - GS_Planet's technique holds the cloud layer pass; GS_PlanetBloom feeds the bloom post-process and GS_PlanetCorona the
+    atmosphere halo on engine-built geometry, neither drawn yet. Depth range is fitted around the model.
 - Texture pages show the image (fitted or 1:1, checkerboard behind alpha) and the brushes and entities using it.
 
 ## Milestones

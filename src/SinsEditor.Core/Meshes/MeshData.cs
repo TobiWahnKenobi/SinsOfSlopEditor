@@ -3,9 +3,10 @@ using System.Numerics;
 
 namespace SinsEditor.Core.Meshes;
 
-/// <summary>A material: its textures (Displacement is the normal map) and the specular exponent the shaders use.</summary>
+/// <summary>A material: its textures (Normal is the normal map; Displacement is rarely used) and the specular exponent and colours the shaders use.</summary>
 public sealed record MeshMaterial(string Diffuse, string SelfIllumination, string Displacement, string TeamColor, float Glossiness = 50f,
-    uint DiffuseColor = 0xFFFFFFFF, uint AmbientColor = 0xFFFFFFFF, uint SpecularColor = 0xFFFFFFFF, uint EmissiveColor = 0xFFFFFFFF)
+    uint DiffuseColor = 0xFFFFFFFF, uint AmbientColor = 0xFFFFFFFF, uint SpecularColor = 0xFFFFFFFF, uint EmissiveColor = 0xFFFFFFFF,
+    string Normal = "")
 {
     /// <summary>An ARGB colour of the file (e.g. <c>ffffffff</c>) as RGBA from 0 to 1, as the shaders get it.</summary>
     public static Vector4 ToVector(uint argb) =>
@@ -49,7 +50,7 @@ public sealed class MeshData
     public static MeshData Parse(IEnumerable<string> lines)
     {
         var mesh = new MeshData();
-        string? diffuse = null, self = null, displacement = null, team = null;
+        string? diffuse = null, self = null, displacement = null, team = null, normalMap = null;
         string? pointName = null;
         Vector3 pointPosition = default;
         int orientationRow = -1;
@@ -64,12 +65,12 @@ public sealed class MeshData
 
         void FlushMaterial()
         {
-            if (diffuse is null && self is null && displacement is null && team is null) return;
+            if (diffuse is null && self is null && displacement is null && team is null && normalMap is null) return;
             mesh.Materials.Add(new MeshMaterial(diffuse ?? "", self ?? "", displacement ?? "", team ?? "", glossiness,
-                diffuseColor, ambientColor, specularColor, emissiveColor));
+                diffuseColor, ambientColor, specularColor, emissiveColor, normalMap ?? ""));
             glossiness = 50f;
             diffuseColor = ambientColor = specularColor = emissiveColor = 0xFFFFFFFF;
-            diffuse = self = displacement = team = null;
+            diffuse = self = displacement = team = normalMap = null;
         }
         void FlushPoint()
         {
@@ -109,6 +110,7 @@ public sealed class MeshData
                 case "Triangle": FlushVertex(); section = key; break;
                 case "DiffuseTextureFileName": diffuse = Unquote(value); break;
                 case "SelfIlluminationTextureFileName": self = Unquote(value); break;
+                case "NormalTextureFileName": normalMap = Unquote(value); break;
                 case "DisplacementTextureFileName": displacement = Unquote(value); break;
                 case "TeamColorTextureFileName": team = Unquote(value); break;
                 case "BoundingRadius": mesh.BoundingRadius = Float(value); break;

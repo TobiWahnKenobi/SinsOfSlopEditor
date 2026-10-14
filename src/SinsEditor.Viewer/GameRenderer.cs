@@ -102,6 +102,7 @@ public sealed class GameRenderer : IDisposable
     private readonly Dictionary<CubeMap, ShaderResourceView> _cubes = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<(bool Clamp, bool Point), SamplerState> _samplers = [];
     private readonly List<GpuItem> _items = [];
+    private GpuItem? _skybox;
     private readonly List<(Buffer Vertices, Buffer Indices, int Count, Vector4 Color)> _markers = [];
     private readonly ShaderResourceView _grey, _flatNormal, _black, _white, _greyCube, _noise3D;
     private readonly VertexShader _helperVs;
@@ -144,7 +145,7 @@ public sealed class GameRenderer : IDisposable
         _black = Solid(0, 0, 0, 0);
         _white = Solid(255, 255, 255, 255);
         _greyCube = CubeView(new CubeMap(1, Enumerable.Range(0, 6).Select(_ => new PixelImage(1, 1, [70, 66, 64, 255])).ToList()));
-        _noise3D = Noise3D(32);
+        _noise3D = Noise3D(64);
 
         byte[] vs = CompileHelper("VS", "vs_4_0");
         _helperVs = new VertexShader(_device, vs);
@@ -198,6 +199,8 @@ public sealed class GameRenderer : IDisposable
     {
         foreach (var item in _items) item.Dispose();
         _items.Clear();
+        _skybox?.Dispose();
+        _skybox = null;
         foreach (var m in _markers) { m.Vertices.Dispose(); m.Indices.Dispose(); }
         _markers.Clear();
         _scene = scene;
@@ -216,6 +219,17 @@ public sealed class GameRenderer : IDisposable
                 continue;
             }
             _items.Add(Upload(item, passes));
+        }
+        if (scene.Skybox is { } sky)
+        {
+            try
+            {
+                _skybox = Upload(sky, EffectPasses(sky.Effect));
+            }
+            catch (Exception e) when (e is ShaderCompileException or SharpDX.SharpDXException)
+            {
+                errors.Add(e.Message);
+            }
         }
         BuildMarkers(scene.Primary);
         Error = errors.Count == 0 ? null : string.Join("\n", errors);
@@ -405,12 +419,41 @@ public sealed class GameRenderer : IDisposable
         return _cubes[cube] = view;
     }
 
-    /// <summary>Random values in every channel, for effects that sample a 3D noise texture (the engine's g_TextureNoise3D).</summary>
+    /// <summary>
+    /// Smooth tiling fractal noise in every channel (each its own pattern), for effects that sample the engine's 3D noise
+    /// texture (g_TextureNoise3D). Per-texel random values would show up as blocks.
+    /// </summary>
     private ShaderResourceView Noise3D(int size)
     {
-        var random = new Random(1);
         var data = new byte[size * size * size * 4];
-        random.NextBytes(data);
+        var random = new Random(1);
+        for (int channel = 0; channel < 4; channel++)
+        {
+            var field = new float[size * size * size];
+            float amplitude = 0.5f, total = 0;
+            for (int cells = 4; cells <= size / 2; cells *= 2, amplitude *= 0.5f)
+            {
+                var lattice = new float[cells * cells * cells];
+                for (int i = 0; i < lattice.Length; i++) lattice[i] = (float)random.NextDouble();
+                float L(int x, int y, int z) => lattice[((z % cells) * cells + (y % cells)) * cells + (x % cells)];
+                static float Smooth(float t) => t * t * (3 - 2 * t);
+                for (int z = 0; z < size; z++)
+                for (int y = 0; y < size; y++)
+                for (int x = 0; x < size; x++)
+                {
+                    float fx = (float)x * cells / size, fy = (float)y * cells / size, fz = (float)z * cells / size;
+                    int x0 = (int)fx, y0 = (int)fy, z0 = (int)fz;
+                    float tx = Smooth(fx - x0), ty = Smooth(fy - y0), tz = Smooth(fz - z0);
+                    float Lerp(float a, float b, float t) => a + (b - a) * t;
+                    float v = Lerp(
+                        Lerp(Lerp(L(x0, y0, z0), L(x0 + 1, y0, z0), tx), Lerp(L(x0, y0 + 1, z0), L(x0 + 1, y0 + 1, z0), tx), ty),
+                        Lerp(Lerp(L(x0, y0, z0 + 1), L(x0 + 1, y0, z0 + 1), tx), Lerp(L(x0, y0 + 1, z0 + 1), L(x0 + 1, y0 + 1, z0 + 1), tx), ty), tz);
+                    field[(z * size + y) * size + x] += v * amplitude;
+                }
+                total += amplitude;
+            }
+            for (int i = 0; i < field.Length; i++) data[i * 4 + channel] = (byte)Math.Clamp(field[i] / total * 255f, 0, 255);
+        }
         using var texture = new Texture3D(_device, new Texture3DDescription
         {
             Width = size, Height = size, Depth = size, MipLevels = 1, Format = Format.B8G8R8A8_UNorm, Usage = ResourceUsage.Default,
@@ -449,6 +492,7 @@ public sealed class GameRenderer : IDisposable
             "g_TextureNormal" => material?.Normal is { } n ? TextureView(n) : _flatNormal,
             "g_TextureSelfIllumination" => material?.Data is { } s ? TextureView(s) : _black,
             "g_TextureTeamColor" => material?.TeamColor is { } t ? TextureView(t) : _black,
+            "g_TextureDisplacement" => material?.Displacement is { } h ? TextureView(h) : _black,
             "g_TextureShadowMap" => _shadowResource,
             _ when texture.Contains("Normal", StringComparison.OrdinalIgnoreCase) => _flatNormal,
             // Unknown textures (e.g. a planet without a cloud layer) add nothing rather than paint over the surface.
@@ -533,76 +577,32 @@ public sealed class GameRenderer : IDisposable
         // The game's shaders take world positions relative to the camera (the camera sits at the origin).
         var eye = camera.Eye;
         var view = LookAtLH(Vector3.Zero, camera.Target - eye, Vector3.UnitY);
-        float near = Math.Max(0.05f, camera.Distance - radius * 4) * 0.25f, far = camera.Distance + radius * 8;
-        var projection = PerspectiveLH(45f * MathF.PI / 180, (float)width / height, Math.Min(near, camera.Distance * 0.05f), far);
+        // Depth range around the model (with room for atmosphere shells and attached meshes): a near plane close to the
+        // camera wastes the depth buffer's precision and makes a planet's surface and cloud shell fight.
+        float distanceToCenter = Vector3.Distance(eye, center);
+        float near = Math.Max(distanceToCenter * 0.002f, distanceToCenter - radius * 2f), far = distanceToCenter + radius * 2f;
+        var projection = PerspectiveLH(45f * MathF.PI / 180, (float)width / height, near, far);
         var cameraOffset = Matrix4x4.CreateTranslation(-eye);
 
         _context.OutputMerger.SetTargets(_depthView, _colorView);
         _context.Rasterizer.SetViewport(new RawViewportF { X = 0, Y = 0, Width = width, Height = height, MinDepth = 0, MaxDepth = 1 });
-        _context.ClearRenderTargetView(_colorView, new RawColor4(0.118f, 0.118f, 0.133f, 1f));
+        // Space behind a skybox is black; without one, the editor's dark grey.
+        _context.ClearRenderTargetView(_colorView, _skybox is null ? new RawColor4(0.118f, 0.118f, 0.133f, 1f) : new RawColor4(0, 0, 0, 1f));
         _context.ClearDepthStencilView(_depthView, DepthStencilClearFlags.Depth | DepthStencilClearFlags.Stencil, 1f, 0);
         _context.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
+
+        if (_skybox is { } sky)
+        {
+            // Around the camera, between the clipping planes; its passes draw without depth. The camera is inside it, looking
+            // at its inner faces, so nothing is culled.
+            float scale = (near + far) / 2 / Math.Max(1f, sky.Item.Mesh.BoundingRadius);
+            DrawItem(sky, Matrix4x4.CreateScale(scale), view, projection, eye, Matrix4x4.Identity, scene!, lightPosition, radius, noCull: true);
+        }
 
         foreach (var item in _items)
         {
             var world = item.Item.Placement * cameraOffset;
-            var shadowUv = item.Item.Placement * lightView * lightProjection * shadowBias;
-            var values = new Dictionary<string, float[]>(StringComparer.Ordinal)
-            {
-                ["g_World"] = M(world),
-                ["g_WorldViewProjection"] = M(world * view * projection),
-                ["g_View"] = M(view),
-                ["g_ViewProjection"] = M(view * projection),
-                ["g_Projection"] = M(projection),
-                ["g_WorldView"] = M(world * view),
-                ["g_ShadowUVTransforms"] = M(shadowUv),
-                ["g_Light0_Position"] = V(lightPosition - eye),
-                ["g_Light0_DiffuseLite"] = [1f, 1f, 1f, 1f],
-                ["g_Light0_DiffuseDark"] = [0.1f, 0.1f, 0.12f, 1f],
-                ["g_Light0_Specular"] = [1f, 1f, 1f, 1f],
-                ["g_Light_AmbientLite"] = [0.35f, 0.35f, 0.38f, 1f],
-                ["g_Light_AmbientDark"] = [0.12f, 0.12f, 0.14f, 1f],
-                ["g_TeamColor"] = V(scene!.TeamColor),
-                ["g_ShadowTextureSize"] = [ShadowSize],
-                ["g_ShadowNormalBias"] = [radius * 0.002f],
-                ["g_ShadowDepthBias"] = [4f],
-                ["g_Time"] = [0f],
-                ["g_Radius"] = [item.Item.Mesh.BoundingRadius],
-            };
-            foreach (var (name, value) in item.Item.Constants ?? new Dictionary<string, Vector4>()) values[name] = V(value);
-
-            _context.InputAssembler.InputLayout = item.Passes.Count > 0 ? item.Passes[0].InputLayout : _helperLayout;
-            _context.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(item.Vertices, Stride, 0));
-            foreach (var (indices, count, materialIndex) in item.Groups)
-            {
-                var material = materialIndex < item.Item.Materials.Count ? item.Item.Materials[materialIndex] : null;
-                values["g_MaterialGlossiness"] = [material?.Glossiness ?? 50f];
-                values["g_MaterialDiffuse"] = V(material?.DiffuseColor ?? Vector4.One);
-                values["g_MaterialAmbient"] = V(material?.AmbientColor ?? Vector4.One);
-                values["g_MaterialSpecular"] = V(material?.SpecularColor ?? Vector4.One);
-                values["g_MaterialEmissive"] = V(material?.EmissiveColor ?? Vector4.One);
-                _context.InputAssembler.SetIndexBuffer(indices, Format.R32_UInt, 0);
-                foreach (var pass in item.Passes)
-                {
-                    if (item.Item.Passes is { } chosen && !chosen.Contains(pass.Name)) continue;
-                    _context.InputAssembler.InputLayout = pass.InputLayout;
-                    _context.VertexShader.Set(pass.Vs);
-                    _context.PixelShader.Set(pass.Ps);
-                    FillConstants(pass.VsInfo, pass.VsCb, values);
-                    FillConstants(pass.PsInfo, pass.PsCb, values);
-                    _context.VertexShader.SetConstantBuffer(0, pass.VsCb);
-                    _context.PixelShader.SetConstantBuffer(0, pass.PsCb);
-                    BindResources(pass.VsInfo, item.Samplers, material, item.Item.Textures, _context.VertexShader);
-                    BindResources(pass.PsInfo, item.Samplers, material, item.Item.Textures, _context.PixelShader);
-                    _context.OutputMerger.SetBlendState(pass.Blend);
-                    _context.OutputMerger.SetDepthStencilState(pass.Depth);
-                    _context.Rasterizer.State = pass.Raster;
-                    _context.DrawIndexed(count, 0, 0);
-                }
-            }
-            // The shadow map is both a render target and an input; unbind it before the next shadow pass.
-            _context.PixelShader.SetShaderResources(0, 16, new ShaderResourceView[16]);
-
+            DrawItem(item, world, view, projection, eye, item.Item.Placement * lightView * lightProjection * shadowBias, scene!, lightPosition, radius);
             if (options.Wireframe)
                 DrawHelper(item.Vertices, item.Groups.Select(g => (g.Indices, g.Count)), world * view * projection, new Vector4(0.35f, 0.8f, 1f, 1f), _wirePs, _wireRaster, _depthRead);
         }
@@ -620,7 +620,70 @@ public sealed class GameRenderer : IDisposable
         var pixels = new byte[width * height * 4];
         for (int y = 0; y < height; y++) Marshal.Copy(box.DataPointer + y * box.RowPitch, pixels, y * width * 4, width * 4);
         _context.UnmapSubresource(_staging, 0);
+        if (_device.DeviceRemovedReason.Failure)
+            throw new SharpDX.SharpDXException(_device.DeviceRemovedReason, "The GPU stopped drawing (a shader took too long or failed).");
         return pixels;
+    }
+
+    /// <summary>Draws a mesh with every pass of its effect, filling the engine's constants by name.</summary>
+    private void DrawItem(GpuItem item, Matrix4x4 world, Matrix4x4 view, Matrix4x4 projection, Vector3 eye, Matrix4x4 shadowUv, GameScene scene,
+        Vector3 lightPosition, float radius, bool noCull = false)
+    {
+        var values = new Dictionary<string, float[]>(StringComparer.Ordinal)
+        {
+            ["g_World"] = M(world),
+            ["g_WorldViewProjection"] = M(world * view * projection),
+            ["g_View"] = M(view),
+            ["g_ViewProjection"] = M(view * projection),
+            ["g_Projection"] = M(projection),
+            ["g_WorldView"] = M(world * view),
+            ["g_ShadowUVTransforms"] = M(shadowUv),
+            ["g_Light0_Position"] = V(lightPosition - eye),
+            ["g_Light0_DiffuseLite"] = [1f, 1f, 1f, 1f],
+            ["g_Light0_DiffuseDark"] = [0.1f, 0.1f, 0.12f, 1f],
+            ["g_Light0_Specular"] = [1f, 1f, 1f, 1f],
+            ["g_Light_AmbientLite"] = [0.35f, 0.35f, 0.38f, 1f],
+            ["g_Light_AmbientDark"] = [0.12f, 0.12f, 0.14f, 1f],
+            ["g_TeamColor"] = V(scene.TeamColor),
+            ["g_ShadowTextureSize"] = [ShadowSize],
+            ["g_ShadowNormalBias"] = [radius * 0.002f],
+            ["g_ShadowDepthBias"] = [4f],
+            ["g_Time"] = [0f],
+            ["g_Radius"] = [item.Item.Mesh.BoundingRadius],
+            ["colorMultiplier"] = [1f],
+        };
+        foreach (var (name, value) in item.Item.Constants ?? new Dictionary<string, Vector4>()) values[name] = V(value);
+
+        _context.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(item.Vertices, Stride, 0));
+        foreach (var (indices, count, materialIndex) in item.Groups)
+        {
+            var material = materialIndex < item.Item.Materials.Count ? item.Item.Materials[materialIndex] : null;
+            values["g_MaterialGlossiness"] = [material?.Glossiness ?? 50f];
+            values["g_MaterialDiffuse"] = V(material?.DiffuseColor ?? Vector4.One);
+            values["g_MaterialAmbient"] = V(material?.AmbientColor ?? Vector4.One);
+            values["g_MaterialSpecular"] = V(material?.SpecularColor ?? Vector4.One);
+            values["g_MaterialEmissive"] = V(material?.EmissiveColor ?? Vector4.One);
+            _context.InputAssembler.SetIndexBuffer(indices, Format.R32_UInt, 0);
+            foreach (var pass in item.Passes)
+            {
+                if (item.Item.Passes is { } chosen && !chosen.Contains(pass.Name)) continue;
+                _context.InputAssembler.InputLayout = pass.InputLayout;
+                _context.VertexShader.Set(pass.Vs);
+                _context.PixelShader.Set(pass.Ps);
+                FillConstants(pass.VsInfo, pass.VsCb, values);
+                FillConstants(pass.PsInfo, pass.PsCb, values);
+                _context.VertexShader.SetConstantBuffer(0, pass.VsCb);
+                _context.PixelShader.SetConstantBuffer(0, pass.PsCb);
+                BindResources(pass.VsInfo, item.Samplers, material, item.Item.Textures, _context.VertexShader);
+                BindResources(pass.PsInfo, item.Samplers, material, item.Item.Textures, _context.PixelShader);
+                _context.OutputMerger.SetBlendState(pass.Blend);
+                _context.OutputMerger.SetDepthStencilState(pass.Depth);
+                _context.Rasterizer.State = noCull ? _noCull : pass.Raster;
+                _context.DrawIndexed(count, 0, 0);
+            }
+        }
+        // The shadow map is both a render target and an input; unbind it before the next shadow pass.
+        _context.PixelShader.SetShaderResources(0, 16, new ShaderResourceView[16]);
     }
 
     private void RenderShadowMap(Matrix4x4 lightViewProjection)
@@ -692,6 +755,7 @@ public sealed class GameRenderer : IDisposable
 
     public void Dispose()
     {
+        _skybox?.Dispose();
         foreach (var item in _items) item.Dispose();
         foreach (var m in _markers) { m.Vertices.Dispose(); m.Indices.Dispose(); }
         foreach (var passes in _effects.Values) foreach (var p in passes) p.Dispose();

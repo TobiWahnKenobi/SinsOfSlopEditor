@@ -130,6 +130,11 @@ public sealed partial class MeshViewModel : PageViewModel
     [ObservableProperty]
     private bool _showClouds = true;
 
+    [ObservableProperty]
+    private bool _showSkybox = true;
+
+    partial void OnShowSkyboxChanged(bool value) => _ = BuildSceneAsync();
+
     /// <summary>True once the game-shader scene is built (screenshots wait for it).</summary>
     [ObservableProperty]
     private bool _sceneReady;
@@ -206,6 +211,10 @@ public sealed partial class MeshViewModel : PageViewModel
         var team = TeamColor.Color;
         var attached = _attached;
         bool clouds = ShowClouds;
+        // The skybox backdrop mesh belonging to the environment maps: skybox02 → SkyboxBackdrop2.
+        LoadedMesh? backdrop = null;
+        if (ShowSkybox && skybox is not null && int.TryParse(new string(skybox.Where(char.IsDigit).ToArray()), out int number))
+            backdrop = await MeshLoader.LoadAsync(_workspace, "SkyboxBackdrop" + number);
         var (scene, cloudPasses) = await Task.Run(() =>
         {
             var main = GameShaders.ForDrawing(_workspace, shader);
@@ -232,7 +241,15 @@ public sealed partial class MeshViewModel : PageViewModel
             }
             var environment = skybox is null ? null : Cube(skybox + "environmentcube");
             var irradiance = skybox is null ? null : Cube(skybox + "irradiance");
-            return (new GameScene(loaded.Data, items, environment, irradiance, team), cloudNames);
+            GameSceneItem? sky = null;
+            if (backdrop is not null)
+            {
+                var skyEffect = GameShaders.ForDrawing(_workspace, "GS_Skybox.fx");
+                try { GameShaderCompiler.Compile(skyEffect); }
+                catch (ShaderCompileException) { }
+                sky = new GameSceneItem(backdrop.Data, System.Numerics.Matrix4x4.Identity, GameMaterials(backdrop.Data), skyEffect);
+            }
+            return (new GameScene(loaded.Data, items, environment, irradiance, team, sky), cloudNames);
         });
         if (version != _sceneVersion) return;
         if (!CloudPasses.SequenceEqual(cloudPasses)) CloudPasses = cloudPasses;
@@ -389,7 +406,7 @@ public sealed partial class MeshViewModel : PageViewModel
                         $"{data.MaxExtents.X - data.MinExtents.X:0.#} × {data.MaxExtents.Y - data.MinExtents.Y:0.#} × {data.MaxExtents.Z - data.MinExtents.Z:0.#}";
             Materials = data.Materials.SelectMany((m, i) => new[]
                 {
-                    ("Diffuse", m.Diffuse), ("Self-illumination", m.SelfIllumination), ("Normal map", m.Displacement), ("Team color", m.TeamColor),
+                    ("Diffuse", m.Diffuse), ("Self-illumination", m.SelfIllumination), ("Normal map", m.Normal), ("Displacement", m.Displacement), ("Team color", m.TeamColor),
                 }
                 .Where(t => t.Item2.Length > 0)
                 .Select(t =>

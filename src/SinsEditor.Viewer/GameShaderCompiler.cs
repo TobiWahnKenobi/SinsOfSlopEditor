@@ -44,15 +44,48 @@ public static class GameShaderCompiler
         var technique = effect.ShaderTechnique ?? throw new ShaderCompileException($"{effect.Name} has no technique with shaders.");
         var passes = new List<CompiledPass>();
         foreach (var pass in technique.Passes.Where(p => p.HasShaders))
-            passes.Add(new CompiledPass(CompileFunction(effect, pass.VertexFunction!, "vs_4_0"), CompileFunction(effect, pass.PixelFunction!, "ps_4_0"), pass));
+        {
+            byte[] vs = CompileFunction(effect, pass.VertexFunction!, "vs_4_0");
+            passes.Add(new CompiledPass(vs, CompileFunction(effect, pass.PixelFunction!, "ps_4_0", VertexOutputs(vs)), pass));
+        }
         return passes;
     }
 
-    public static byte[] CompileFunction(EffectFile effect, string function, string profile)
+    /// <summary>
+    /// Shader model 2/3 hardware stops a loop after 255 iterations; Direct3D 11 doesn't, so a loop whose bound turns out NaN
+    /// (e.g. a mod's parallax skybox) runs until Windows resets the GPU. Loops with an int counter get the same cap.
+    /// </summary>
+    private static string CapLoops(string source) =>
+        System.Text.RegularExpressions.Regex.Replace(source, @"\bfor\s*\(\s*int\s+(\w+)\s*=([^;]*);([^;]+);",
+            m => $"for(int {m.Groups[1].Value} ={m.Groups[2].Value}; ({m.Groups[3].Value}) && ({m.Groups[1].Value} < 255);");
+
+    /// <summary>What a vertex shader outputs, in register order: semantic (with index) and component count.</summary>
+    private static List<(string Semantic, int Index, int Components, bool Position)> VertexOutputs(byte[] vertexShader)
     {
-        string source = effect.ShaderSource;
+        using var reflection = new ShaderReflection(vertexShader);
+        var outputs = new List<(string, int, int, bool)>();
+        for (int i = 0; i < reflection.Description.OutputParameters; i++)
+        {
+            var o = reflection.GetOutputParameterDescription(i);
+            int components = System.Numerics.BitOperations.PopCount((uint)o.UsageMask) is > 0 and var n ? n : 4;
+            outputs.Add((o.SemanticName, o.SemanticIndex, Math.Max(components, BitWidth((uint)o.UsageMask)), o.SystemValueType == SystemValueType.Position));
+        }
+        return outputs;
+    }
+
+    private static int BitWidth(uint mask) => 32 - System.Numerics.BitOperations.LeadingZeroCount(mask);
+
+    public static byte[] CompileFunction(EffectFile effect, string function, string profile,
+        IReadOnlyList<(string Semantic, int Index, int Components, bool Position)>? vertexOutputs = null)
+    {
+        string source = CapLoops(effect.ShaderSource);
         if (profile.StartsWith("ps", StringComparison.Ordinal) && VposWrapper(source, function) is { } wrapper)
             (source, function) = (source + wrapper.Code, wrapper.Entry);
+        else if (profile.StartsWith("ps", StringComparison.Ordinal) && vertexOutputs != null && LinkageWrapper(source, function, vertexOutputs) is { } linkage)
+            (source, function) = (source + linkage.Code, linkage.Entry);
+        // For looking at what is compiled (wrappers included): SINSEDITOR_SHADER_DUMP=<folder>.
+        if (Environment.GetEnvironmentVariable("SINSEDITOR_SHADER_DUMP") is { Length: > 0 } dump)
+            System.IO.File.WriteAllText(System.IO.Path.Combine(dump, $"{effect.Name}.{function}.{profile}.hlsl"), source);
         try
         {
             using var result = ShaderBytecode.Compile(source, function, profile, Flags, EffectFlags.None, Defines, null, effect.Name);
@@ -63,6 +96,72 @@ public static class GameShaderCompiler
         {
             throw new ShaderCompileException($"{effect.Name} {function}: {e.Message}");
         }
+    }
+
+    /// <summary>
+    /// Direct3D 9 links vertex outputs to pixel inputs by semantic; Direct3D 11 by register, in order. A pixel shader with
+    /// separate parameters that leaves out the position (e.g. <c>RenderScenePS(float4 iColor : COLOR, float2 uv : TEXCOORD0, out
+    /// float4 o : COLOR0)</c>) would read everything shifted. This makes an entry point that takes exactly what the vertex shader
+    /// outputs, in its order, and passes each value on by semantic.
+    /// </summary>
+    private static (string Code, string Entry)? LinkageWrapper(string source, string function,
+        IReadOnlyList<(string Semantic, int Index, int Components, bool Position)> outputs)
+    {
+        var signature = System.Text.RegularExpressions.Regex.Match(source,
+            $@"\b(void|float4|half4)\s+{function}\s*\(([^)]*)\)\s*(?::\s*(\w+))?\s*\{{");
+        if (!signature.Success) return null;
+        var parameters = new List<(string Direction, string Type, string Name, string Semantic)>();
+        // Parameters may be commented out inside the list.
+        string list = System.Text.RegularExpressions.Regex.Replace(signature.Groups[2].Value, @"//[^\n]*|/\*.*?\*/", "",
+            System.Text.RegularExpressions.RegexOptions.Singleline);
+        foreach (string raw in list.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            var m = System.Text.RegularExpressions.Regex.Match(raw, @"^(?:(in|out|inout)\s+)?(\w+)\s+(\w+)\s*:\s*(\w+)$");
+            if (!m.Success) return null;
+            string type = m.Groups[2].Value;
+            // Structs are linked as a whole already; only plain parameters are rewired.
+            if (!System.Text.RegularExpressions.Regex.IsMatch(type, @"^(float|half|int|uint|bool)[1-4]?$")) return null;
+            parameters.Add((m.Groups[1].Value, type, m.Groups[3].Value, m.Groups[4].Value.ToUpperInvariant()));
+        }
+        var inputs = parameters.Where(p => p.Direction != "out").ToList();
+        if (inputs.Any(p => p.Semantic is "POSITION" or "POSITION0" or "VPOS" or "SV_POSITION")) return null;
+
+        static (string Name, int Index) Split(string semantic)
+        {
+            int digits = semantic.Length;
+            while (digits > 0 && char.IsDigit(semantic[digits - 1])) digits--;
+            return (semantic[..digits], digits < semantic.Length ? int.Parse(semantic[digits..]) : 0);
+        }
+
+        var code = new System.Text.StringBuilder();
+        string entry = "SinsEditor_Linked_" + function;
+        var wrapperParams = outputs.Select((o, i) => o.Position
+            ? $"float4 v{i} : SV_Position"
+            : $"float{(o.Components > 1 ? o.Components.ToString() : "")} v{i} : {o.Semantic}{o.Index}");
+        code.Append($"\nfloat4 {entry}({string.Join(", ", wrapperParams)}) : SV_Target\n{{\n");
+        var args = new List<string>();
+        string? outName = null;
+        foreach (var p in parameters)
+        {
+            if (p.Direction == "out")
+            {
+                code.Append($"    {p.Type} {p.Name};\n");
+                outName ??= p.Name;
+                args.Add(p.Name);
+                continue;
+            }
+            var (name, index) = Split(p.Semantic);
+            int match = outputs.ToList().FindIndex(o => !o.Position && string.Equals(o.Semantic, name, StringComparison.OrdinalIgnoreCase) && o.Index == index);
+            args.Add(match >= 0 ? $"({p.Type})v{match}" : $"({p.Type})0");
+        }
+        string call = $"{function}({string.Join(", ", args)})";
+        if (signature.Groups[1].Value == "void")
+        {
+            if (outName is null) return null;
+            code.Append($"    {call};\n    return (float4){outName};\n}}\n");
+        }
+        else code.Append($"    return {call};\n}}\n");
+        return (code.ToString(), entry);
     }
 
     /// <summary>

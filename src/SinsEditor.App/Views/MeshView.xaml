@@ -39,6 +39,8 @@
                     <TextBlock Grid.Row="2" Text="Team colour" VerticalAlignment="Center" />
                     <ComboBox Grid.Row="2" Grid.Column="1" ItemsSource="{Binding TeamColorChoices}" SelectedItem="{Binding TeamColor}" Margin="0,2" />
                 </Grid>
+                <CheckBox Content="Skybox backdrop" IsChecked="{Binding ShowSkybox}" Margin="0,0,0,4"
+                          Visibility="{Binding UseGameShaders, Converter={StaticResource BoolToVisibility}}" />
                 <CheckBox Content="Cloud layer" IsChecked="{Binding ShowClouds}" Margin="0,0,0,4"
                           Visibility="{Binding HasClouds, Converter={StaticResource BoolToVisibility}}" />
                 <TextBlock Text="{Binding ShaderNote}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,12" FontSize="12"

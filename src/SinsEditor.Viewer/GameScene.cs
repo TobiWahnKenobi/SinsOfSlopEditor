@@ -10,11 +10,12 @@ namespace SinsEditor.Viewer;
 /// material's colours from the mesh file (g_MaterialDiffuse … ; a mod's planet shader picks its pass from the Specular alpha).
 /// </summary>
 public sealed record GameMaterial(PixelImage? Diffuse, PixelImage? Data, PixelImage? Normal, PixelImage? TeamColor, float Glossiness,
-    Vector4 DiffuseColor, Vector4 AmbientColor, Vector4 SpecularColor, Vector4 EmissiveColor)
+    Vector4 DiffuseColor, Vector4 AmbientColor, Vector4 SpecularColor, Vector4 EmissiveColor, PixelImage? Displacement = null)
 {
     public static GameMaterial From(MeshMaterial m, Func<string, PixelImage?> image) => new(
-        image(m.Diffuse), image(m.SelfIllumination), image(m.Displacement), image(m.TeamColor), m.Glossiness,
-        MeshMaterial.ToVector(m.DiffuseColor), MeshMaterial.ToVector(m.AmbientColor), MeshMaterial.ToVector(m.SpecularColor), MeshMaterial.ToVector(m.EmissiveColor));
+        image(m.Diffuse), image(m.SelfIllumination), image(m.Normal), image(m.TeamColor), m.Glossiness,
+        MeshMaterial.ToVector(m.DiffuseColor), MeshMaterial.ToVector(m.AmbientColor), MeshMaterial.ToVector(m.SpecularColor), MeshMaterial.ToVector(m.EmissiveColor),
+        image(m.Displacement));
 }
 
 /// <summary>
@@ -28,7 +29,9 @@ public sealed record GameSceneItem(MeshData Mesh, Matrix4x4 Placement, IReadOnly
     IReadOnlyDictionary<string, Vector4>? Constants = null);
 
 /// <summary>Everything the game-shader view draws: the meshes, the skybox's environment maps and the team colour.</summary>
-public sealed record GameScene(MeshData Primary, IReadOnlyList<GameSceneItem> Items, CubeMap? Environment, CubeMap? Irradiance, Vector4 TeamColor);
+/// <remarks><paramref name="Skybox"/> is the skybox backdrop mesh, drawn first around the camera without depth.</remarks>
+public sealed record GameScene(MeshData Primary, IReadOnlyList<GameSceneItem> Items, CubeMap? Environment, CubeMap? Irradiance, Vector4 TeamColor,
+    GameSceneItem? Skybox = null);
 
 /// <summary>Where the camera looks from: an orbit around <see cref="Target"/> in game space (left-handed, ships face +Z).</summary>
 public record struct OrbitCamera(Vector3 Target, float Yaw, float Pitch, float Distance)

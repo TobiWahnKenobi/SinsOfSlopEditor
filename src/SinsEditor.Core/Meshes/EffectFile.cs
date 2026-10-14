@@ -137,7 +137,7 @@ public static class GameShaders
             .Select(r => r.Source.EntityType).ToHashSet(StringComparer.OrdinalIgnoreCase);
         // Asteroid belts are Planet entities too, but their meshes are drawn as asteroids.
         if (name.Contains("Asteroid", StringComparison.OrdinalIgnoreCase)) return "GS_ShadowedAsteroid.fx";
-        if (types.Contains("Planet")) return "GS_Planet.fx";
+        if (types.Contains("Planet") || name.StartsWith("Planet_", StringComparison.OrdinalIgnoreCase)) return "GS_Planet.fx";
         if (types.Contains("Star")) return "GS_Star.fx";
         if (name.StartsWith("Skybox", StringComparison.OrdinalIgnoreCase)) return "GS_Skybox.fx";
         return Ship;

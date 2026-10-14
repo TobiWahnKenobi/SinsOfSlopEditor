@@ -14,6 +14,7 @@ public class GameShaderTests(ITestOutputHelper output)
     [InlineData("GS_Ship.fx")]
     [InlineData("GS_ShadowedAsteroid.fx")]
     [InlineData("GS_Planet.fx")]
+    [InlineData("GS_Skybox.fx")]
     public void Game_shaders_compile_for_direct3d11(string name)
     {
         Skip.If(PipelineEffect is null, "Game directory not configured.");
@@ -42,7 +43,7 @@ public class GameShaderTests(ITestOutputHelper output)
                     for (int v = 0; v < cb.Description.VariableCount; v++)
                     {
                         var d = cb.GetVariable(v).Description;
-                        output.WriteLine($"{name} cb {cb.Description.Name} {d.Name} @{d.StartOffset} {d.Size}");
+                        output.WriteLine($"{name} cb {cb.Description.Name} {d.Name} @{d.StartOffset} {d.Size} default {(d.DefaultValue == IntPtr.Zero ? "none" : System.Runtime.InteropServices.Marshal.ReadInt32(d.DefaultValue).ToString("x8"))}");
                     }
                 }
             }
