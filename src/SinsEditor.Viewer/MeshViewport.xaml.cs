@@ -167,7 +167,8 @@ public partial class MeshViewport : UserControl
         _framedMesh = mesh;
         var center = Flip((mesh.MinExtents + mesh.MaxExtents) / 2);
         float radius = mesh.BoundingRadius > 0 ? mesh.BoundingRadius : Vector3.Distance(mesh.MinExtents, mesh.MaxExtents) / 2;
-        var direction = Vector3.Normalize(new Vector3(0.9f, 0.6f, 1.3f));
+        // Ships face +Z in the file, which the viewer mirrors to -Z: look from the front, above and to the side.
+        var direction = Vector3.Normalize(new Vector3(0.9f, 0.6f, -1.3f));
         float distance = radius / MathF.Tan(45f * MathF.PI / 360f) * 1.15f;
         var position = center + direction * distance;
         Camera.Position = new Media.Media3D.Point3D(position.X, position.Y, position.Z);
