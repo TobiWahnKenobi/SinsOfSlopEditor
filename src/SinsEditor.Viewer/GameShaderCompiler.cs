@@ -41,14 +41,53 @@ public static class GameShaderCompiler
 
     private static IReadOnlyList<CompiledPass> CompileUncached(EffectFile effect)
     {
-        var technique = effect.ShaderTechnique ?? throw new ShaderCompileException($"{effect.Name} has no technique with shaders.");
+        var technique = effect.ShaderTechnique ?? effect.FixedFunctionTechnique
+            ?? throw new ShaderCompileException($"{effect.Name} has no technique with shaders.");
         var passes = new List<CompiledPass>();
-        foreach (var pass in technique.Passes.Where(p => p.HasShaders))
+        foreach (var pass in technique.Passes.Where(p => p.VertexFunction != null))
         {
             byte[] vs = CompileFunction(effect, pass.VertexFunction!, "vs_4_0");
-            passes.Add(new CompiledPass(vs, CompileFunction(effect, pass.PixelFunction!, "ps_4_0", VertexOutputs(vs)), pass));
+            byte[] ps = pass.PixelFunction is { } function
+                ? CompileFunction(effect, function, "ps_4_0", VertexOutputs(vs))
+                : FixedFunctionPixelShader(effect, pass, VertexOutputs(vs));
+            passes.Add(new CompiledPass(vs, ps, pass));
         }
         return passes;
+    }
+
+    /// <summary>
+    /// The pixel stage of a fixed-function pass (particle effects): the texture of <c>Texture[0]</c> times the vertex colour,
+    /// as Direct3D 9's default texture stage does. Inputs are taken in the vertex shader's output order. The texture keeps its
+    /// effect name (e.g. g_TextureDiffuse0), so it's bound like any other.
+    /// </summary>
+    private static byte[] FixedFunctionPixelShader(EffectFile effect, EffectPass pass,
+        IReadOnlyList<(string Semantic, int Index, int Components, bool Position)> outputs)
+    {
+        string texture = pass.States.TryGetValue("Texture0", out var t) ? t : "g_TextureDiffuse0";
+        var parameters = outputs.Select((o, i) => o.Position ? $"float4 v{i} : SV_Position"
+            : $"float{(o.Components > 1 ? o.Components.ToString() : "")} v{i} : {o.Semantic}{o.Index}").ToList();
+        int color = outputs.ToList().FindIndex(o => o.Semantic.Equals("COLOR", StringComparison.OrdinalIgnoreCase) && o.Index == 0);
+        int uv = outputs.ToList().FindIndex(o => o.Semantic.Equals("TEXCOORD", StringComparison.OrdinalIgnoreCase) && o.Index == 0 && o.Components >= 2);
+        string colorExpr = color >= 0 ? (outputs[color].Components == 4 ? $"v{color}" : $"float4(v{color}.rgb, 1)") : "float4(1, 1, 1, 1)";
+        string textureExpr = uv >= 0 ? $"{texture}.Sample({texture}Sampler, v{uv}.xy)" : "float4(1, 1, 1, 1)";
+        string source = $$"""
+            Texture2D {{texture}};
+            SamplerState {{texture}}Sampler;
+            float4 FixedFunctionPS({{string.Join(", ", parameters)}}) : SV_Target
+            {
+                return {{textureExpr}} * {{colorExpr}};
+            }
+            """;
+        try
+        {
+            using var result = ShaderBytecode.Compile(source, "FixedFunctionPS", "ps_4_0", ShaderFlags.OptimizationLevel3, EffectFlags.None, null, null, effect.Name);
+            if (result.Bytecode is null || result.HasErrors) throw new ShaderCompileException($"{effect.Name} fixed function: {result.Message}");
+            return result.Bytecode.Data;
+        }
+        catch (SharpDX.CompilationException e)
+        {
+            throw new ShaderCompileException($"{effect.Name} fixed function: {e.Message}");
+        }
     }
 
     /// <summary>

@@ -3,6 +3,17 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:assets="clr-namespace:SinsEditor.App.Assets"
              xmlns:viewer="clr-namespace:SinsEditor.Viewer;assembly=SinsEditor.Viewer">
+    <UserControl.Resources>
+        <!-- Checkerboard behind the exported picture so transparency is visible. -->
+        <DrawingBrush x:Key="Checker" TileMode="Tile" Viewport="0,0,16,16" ViewportUnits="Absolute">
+            <DrawingBrush.Drawing>
+                <DrawingGroup>
+                    <GeometryDrawing Brush="#FF3A3A3A" Geometry="M0,0 H2 V2 H0 Z" />
+                    <GeometryDrawing Brush="#FF4A4A4A" Geometry="M0,0 H1 V1 H0 Z M1,1 H2 V2 H1 Z" />
+                </DrawingGroup>
+            </DrawingBrush.Drawing>
+        </DrawingBrush>
+    </UserControl.Resources>
     <Grid>
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="360" MinWidth="280" />
@@ -43,8 +54,80 @@
                     <ComboBox Grid.Row="3" Grid.Column="1" ItemsSource="{Binding StarDistanceChoices}" SelectedItem="{Binding StarDistance}" Margin="0,2"
                               ToolTip="Where the light comes from. Remastered's PBR shaders light ships brighter close to a star." />
                 </Grid>
-                <CheckBox Content="Skybox backdrop" IsChecked="{Binding ShowSkybox}" Margin="0,0,0,4"
-                          Visibility="{Binding UseGameShaders, Converter={StaticResource BoolToVisibility}}" />
+                <StackPanel Visibility="{Binding UseGameShaders, Converter={StaticResource BoolToVisibility}}">
+                    <Grid Margin="0,2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="100" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="Background" VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1" ItemsSource="{Binding BackgroundChoiceList}" SelectedItem="{Binding Background}"
+                                  ToolTip="Skybox, or a fixed 2D picture behind the model (e.g. a button without its icon)" />
+                    </Grid>
+                    <DockPanel Margin="100,2,0,2" Visibility="{Binding IsImageBackground, Converter={StaticResource BoolToVisibility}}">
+                        <Button DockPanel.Dock="Right" Content="Choose…" Command="{Binding LoadBackgroundFileCommand}" Margin="6,0,0,0" />
+                        <TextBlock Text="{Binding BackgroundText}" Style="{StaticResource Muted}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <StackPanel Margin="100,2,0,2" Visibility="{Binding IsBrushBackground, Converter={StaticResource BoolToVisibility}}">
+                        <ComboBox IsEditable="True" ItemsSource="{Binding BrushNames}" Text="{Binding BackgroundBrush, UpdateSourceTrigger=PropertyChanged, Delay=400}"
+                                  IsTextSearchEnabled="True" ToolTip="The brush's image is the background" />
+                        <TextBlock Text="{Binding BackgroundText}" Style="{StaticResource Muted}" FontSize="12" />
+                    </StackPanel>
+                    <CheckBox Content="Skybox backdrop" IsChecked="{Binding ShowSkybox}" Margin="0,2,0,4"
+                              ToolTip="Off: only the skybox's reflections and lighting" />
+
+                    <StackPanel Visibility="{Binding HasParticleEffects, Converter={StaticResource BoolToVisibility}}" Margin="0,4,0,4">
+                        <CheckBox Content="Particles" IsChecked="{Binding ShowParticles}" Margin="0,0,0,4"
+                                  ToolTip="The particle effects on Flair- hardpoints, simulated" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <Button Content="&#xE892;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Command="{Binding RestartCommand}" ToolTip="Back to the start" Padding="8,4" Margin="0,0,4,0" />
+                            <Button Content="&#xE76B;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Command="{Binding StepBackCommand}" ToolTip="Step back" Padding="8,4" Margin="0,0,4,0" />
+                            <Button Content="{Binding PlayText}" Command="{Binding PlayPauseCommand}" MinWidth="64" Margin="0,0,4,0" />
+                            <Button Content="&#xE76C;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Command="{Binding StepForwardCommand}" ToolTip="Step forward" Padding="8,4" Margin="0,0,8,0" />
+                            <ComboBox ItemsSource="{Binding Speeds}" SelectedItem="{Binding PlaybackSpeed}" ItemStringFormat="{}{0}×" Width="80" ToolTip="Playback speed" />
+                        </StackPanel>
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding TimeText}" Style="{StaticResource Muted}" Width="56" TextAlignment="Right" VerticalAlignment="Center" />
+                            <Slider Minimum="0" Maximum="{Binding ParticleDuration}" Value="{Binding ParticleTime}" VerticalAlignment="Center" />
+                        </DockPanel>
+                    </StackPanel>
+
+                    <TextBlock Text="Picture" Style="{StaticResource SectionHeader}" Margin="0,8,0,4" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="100" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Text="For brush" VerticalAlignment="Center" />
+                        <ComboBox Grid.Column="1" IsEditable="True" ItemsSource="{Binding BrushNames}" Margin="0,2"
+                                  Text="{Binding ExportBrush, UpdateSourceTrigger=PropertyChanged, Delay=400}" IsTextSearchEnabled="True"
+                                  ToolTip="Optional: takes the brush's size, and the picture can go into its brush editor" />
+                        <TextBlock Grid.Row="1" Text="Size" VerticalAlignment="Center" />
+                        <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,2">
+                            <TextBox Text="{Binding ExportWidth, UpdateSourceTrigger=PropertyChanged, Delay=400}" Width="70" />
+                            <TextBlock Text=" × " VerticalAlignment="Center" />
+                            <TextBox Text="{Binding ExportHeight, UpdateSourceTrigger=PropertyChanged, Delay=400}" Width="70" />
+                        </StackPanel>
+                        <CheckBox Grid.Row="2" Grid.Column="1" Content="On the brush's current image" IsChecked="{Binding ExportOnBrushImage}" Margin="0,2"
+                                  ToolTip="Use the brush's image as background instead of the one chosen above" />
+                    </Grid>
+                    <StackPanel Orientation="Horizontal" Margin="0,6,0,4">
+                        <Button Content="Preview" Command="{Binding PreviewExportCommand}" Margin="0,0,6,0" />
+                        <Button Content="Save image…" Command="{Binding SaveImageCommand}" Margin="0,0,6,0" />
+                        <Button Content="Use in brush…" Command="{Binding UseInBrushCommand}" IsEnabled="{Binding CanUseInBrush}"
+                                ToolTip="Opens the brush editor with this picture as the new Normal image" />
+                    </StackPanel>
+                    <TextBlock Text="{Binding ExportText}" Style="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" />
+                    <Border Background="{StaticResource Checker}" HorizontalAlignment="Left" Margin="0,4,0,8"
+                            Visibility="{Binding ExportPreview, Converter={StaticResource NullToCollapsed}}">
+                        <Image Source="{Binding ExportPreview}" MaxWidth="256" MaxHeight="256" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" />
+                    </Border>
+                </StackPanel>
                 <CheckBox Content="Cloud layer" IsChecked="{Binding ShowClouds}" Margin="0,0,0,4"
                           Visibility="{Binding HasClouds, Converter={StaticResource BoolToVisibility}}" />
                 <TextBlock Text="{Binding ShaderNote}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,12" FontSize="12"
@@ -165,6 +248,8 @@
         <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
 
         <viewer:GameMeshView Grid.Column="2" Scene="{Binding GameScene}" ShowPoints="{Binding ShowPoints}" ShowWireframe="{Binding ShowWireframe}"
+                             ShowParticles="{Binding ShowParticles}" ParticleTime="{Binding ParticleTime}" IsPlaying="{Binding IsPlaying}"
+                             PlaybackSpeed="{Binding PlaybackSpeed}" ParticleDuration="{Binding ParticleDuration}" Capture="{Binding Capture}"
                              Visibility="{Binding UseGameShaders, Converter={StaticResource BoolToVisibility}}" />
         <viewer:MeshViewport Grid.Column="2" Mesh="{Binding Mesh}" Textures="{Binding Textures}" Attachments="{Binding Attachments}"
                              Visibility="{Binding UseSimpleView, Converter={StaticResource BoolToVisibility}}"

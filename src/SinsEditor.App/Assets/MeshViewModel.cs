@@ -35,6 +35,14 @@ public sealed record TeamColorChoice(string Name, System.Numerics.Vector4 Color)
     public override string ToString() => Name;
 }
 
+/// <summary>What is behind the model.</summary>
+public enum BackgroundMode { Skybox, Image, Brush, None }
+
+public sealed record BackgroundChoice(BackgroundMode Mode, string Name)
+{
+    public override string ToString() => Name;
+}
+
 /// <summary>How far the star is: PBR shaders light ships much brighter close to a star.</summary>
 public sealed record StarDistanceChoice(string Name, float Distance)
 {
@@ -140,6 +148,211 @@ public sealed partial class MeshViewModel : PageViewModel
 
     partial void OnStarDistanceChanged(StarDistanceChoice value) => _ = BuildSceneAsync();
 
+    // ---- Particles on Flair- hardpoints: simulated sprites, with playback ----
+
+    [ObservableProperty]
+    private bool _showParticles = true;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(PlayText))]
+    private bool _isPlaying;
+
+    [ObservableProperty]
+    private double _playbackSpeed = 1;
+
+    /// <summary>Seconds into the particle effects (the view runs the simulations there; 3 s shows them settled).</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TimeText))]
+    private double _particleTime = 3;
+
+    [ObservableProperty]
+    private double _particleDuration = 10;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasParticleEffects))]
+    private int _particleEffectCount;
+
+    public bool HasParticleEffects => ParticleEffectCount > 0;
+    public string PlayText => IsPlaying ? "Pause" : "Play";
+    public string TimeText => $"{ParticleTime:0.00} s";
+    public IReadOnlyList<double> Speeds { get; } = [0.1, 0.25, 0.5, 1, 2, 4];
+
+    [RelayCommand]
+    private void PlayPause() => IsPlaying = !IsPlaying;
+
+    [RelayCommand]
+    private void StepBack()
+    {
+        IsPlaying = false;
+        ParticleTime = Math.Max(0, ParticleTime - 1.0 / 30 * Math.Max(1, PlaybackSpeed * 3));
+    }
+
+    [RelayCommand]
+    private void StepForward()
+    {
+        IsPlaying = false;
+        ParticleTime = Math.Min(ParticleDuration, ParticleTime + 1.0 / 30 * Math.Max(1, PlaybackSpeed * 3));
+    }
+
+    [RelayCommand]
+    private void Restart() => ParticleTime = 0;
+
+    // ---- Background: skybox, a fixed 2D picture (file or brush), or none ----
+
+    public static IReadOnlyList<BackgroundChoice> BackgroundChoices { get; } =
+    [
+        new(BackgroundMode.Skybox, "Skybox"),
+        new(BackgroundMode.Image, "Image file"),
+        new(BackgroundMode.Brush, "Brush"),
+        new(BackgroundMode.None, "None"),
+    ];
+
+    public IReadOnlyList<BackgroundChoice> BackgroundChoiceList => BackgroundChoices;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsImageBackground), nameof(IsBrushBackground))]
+    private BackgroundChoice _background = BackgroundChoices[0];
+
+    [ObservableProperty]
+    private string? _backgroundText;
+
+    [ObservableProperty]
+    private string _backgroundBrush = "";
+
+    private PixelImage? _backgroundFile, _backgroundBrushImage;
+
+    public bool IsImageBackground => Background.Mode == BackgroundMode.Image;
+    public bool IsBrushBackground => Background.Mode == BackgroundMode.Brush;
+    public IReadOnlyList<string> BrushNames { get; private set; } = [];
+
+    partial void OnBackgroundChanged(BackgroundChoice value)
+    {
+        if (value.Mode == BackgroundMode.Image && _backgroundFile is null) LoadBackgroundFile();
+        _ = BuildSceneAsync();
+    }
+
+    partial void OnBackgroundBrushChanged(string value)
+    {
+        _backgroundBrushImage = BrushImage(value);
+        BackgroundText = _backgroundBrushImage is { } img ? $"{img.Width} × {img.Height}" : value.Length > 0 ? "No such brush, or it has no image." : null;
+        if (IsBrushBackground) _ = BuildSceneAsync();
+    }
+
+    private PixelImage? BrushImage(string name) =>
+        name.Length > 0 && _workspace.Index.Brushes.Contains(name) ? _workspace.Textures.RenderBrush(name).Image : null;
+
+    /// <summary>The fixed 2D background now chosen, if any.</summary>
+    private PixelImage? BackgroundImage => Background.Mode switch
+    {
+        BackgroundMode.Image => _backgroundFile,
+        BackgroundMode.Brush => _backgroundBrushImage,
+        _ => null,
+    };
+
+    [RelayCommand]
+    private void LoadBackgroundFile()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog { Filter = Imaging.ImageFiles.DialogFilter, Title = "Background picture" };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            _backgroundFile = Imaging.ImageFiles.Load(dialog.FileName);
+            BackgroundText = $"{Path.GetFileName(dialog.FileName)} · {_backgroundFile.Width} × {_backgroundFile.Height}";
+            if (!IsImageBackground) Background = BackgroundChoices[1];
+            else _ = BuildSceneAsync();
+        }
+        catch (Exception e) when (e is IOException or NotSupportedException or TextureLoadException or System.Runtime.InteropServices.COMException)
+        {
+            BackgroundText = $"Couldn't read {Path.GetFileName(dialog.FileName)}: {e.Message}";
+        }
+    }
+
+    // ---- Pictures of the view: a size, or a brush's size (optionally on its image), to a file or into the brush editor ----
+
+    public ViewportCapture Capture { get; } = new();
+
+    [ObservableProperty]
+    private int _exportWidth = 256;
+
+    [ObservableProperty]
+    private int _exportHeight = 256;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanUseInBrush))]
+    private string _exportBrush = "";
+
+    [ObservableProperty]
+    private bool _exportOnBrushImage;
+
+    [ObservableProperty]
+    private System.Windows.Media.Imaging.BitmapSource? _exportPreview;
+
+    [ObservableProperty]
+    private string? _exportText;
+
+    public bool CanUseInBrush => _workspace.Index.Brushes.Contains(ExportBrush.Trim());
+
+    partial void OnExportBrushChanged(string value)
+    {
+        // Take the brush's size (its Normal image).
+        if (BrushImage(value.Trim()) is { } image) (ExportWidth, ExportHeight) = (image.Width, image.Height);
+    }
+
+    /// <summary>
+    /// The picture to export: the view without hardpoints, at the chosen size, on the chosen 2D background (or the brush's
+    /// own image), transparent if there's none.
+    /// </summary>
+    private PixelImage? CaptureImage()
+    {
+        if (ExportWidth is < 1 or > 4096 || ExportHeight is < 1 or > 4096)
+        {
+            ExportText = "Enter a size between 1 and 4096.";
+            return null;
+        }
+        var background = ExportOnBrushImage && BrushImage(ExportBrush.Trim()) is { } brush ? brush : BackgroundImage;
+        if (background != null && (background.Width != ExportWidth || background.Height != ExportHeight))
+            background = ImageOps.Scale(background, ExportWidth, ExportHeight);
+        var image = Capture.Capture(new CaptureRequest(ExportWidth, ExportHeight, background));
+        if (image is null)
+        {
+            ExportText = "The game-shader view has nothing to capture.";
+            return null;
+        }
+        ExportPreview = Imaging.ImageConverter.ToBitmap(image);
+        ExportText = $"{image.Width} × {image.Height}" + (background is null ? ", transparent background" : "");
+        return image;
+    }
+
+    [RelayCommand]
+    private void PreviewExport() => CaptureImage();
+
+    [RelayCommand]
+    private void SaveImage()
+    {
+        if (CaptureImage() is not { } image) return;
+        var dialog = new Microsoft.Win32.SaveFileDialog { Filter = "PNG image (*.png)|*.png", FileName = $"{Name}_{image.Width}x{image.Height}.png" };
+        if (dialog.ShowDialog() != true) return;
+        try
+        {
+            PngWriter.Save(image, dialog.FileName);
+            ExportText = $"Saved {Path.GetFileName(dialog.FileName)}.";
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException)
+        {
+            ExportText = $"Couldn't save: {e.Message}";
+        }
+    }
+
+    /// <summary>Opens the brush editor for the chosen brush with this picture as its new Normal image (other states derived).</summary>
+    [RelayCommand]
+    private void UseInBrush()
+    {
+        string brush = ExportBrush.Trim();
+        if (!CanUseInBrush || CaptureImage() is not { } image) return;
+        BrushEditing.BrushEditorViewModel.PendingImport = (image, $"view of {Name}");
+        _navigate(new BrushTarget(brush));
+    }
+
     [ObservableProperty]
     private string? _shaderNote;
 
@@ -165,6 +378,7 @@ public sealed partial class MeshViewModel : PageViewModel
 
     private LoadedMesh? _loaded;
     private IReadOnlyList<AttachedMesh> _attached = [];
+    private IReadOnlyList<AttachedEffect> _effects = [];
     private readonly Dictionary<string, PixelImage?> _images = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, CubeMap?> _cubes = new(StringComparer.OrdinalIgnoreCase);
     private int _sceneVersion;
@@ -234,7 +448,10 @@ public sealed partial class MeshViewModel : PageViewModel
         bool clouds = ShowClouds;
         // The skybox backdrop mesh belonging to the environment maps: skybox02 → SkyboxBackdrop2.
         LoadedMesh? backdrop = null;
-        if (ShowSkybox && skybox is not null && int.TryParse(new string(skybox.Where(char.IsDigit).ToArray()), out int number))
+        var background = BackgroundImage;
+        bool useSkybox = Background.Mode == BackgroundMode.Skybox;
+        var effects = _effects;
+        if (useSkybox && ShowSkybox && skybox is not null && int.TryParse(new string(skybox.Where(char.IsDigit).ToArray()), out int number))
             backdrop = await MeshLoader.LoadAsync(_workspace, "SkyboxBackdrop" + number);
         var (scene, cloudPasses) = await Task.Run(() =>
         {
@@ -270,7 +487,18 @@ public sealed partial class MeshViewModel : PageViewModel
                 catch (ShaderCompileException) { }
                 sky = new GameSceneItem(backdrop.Data, System.Numerics.Matrix4x4.Identity, GameMaterials(backdrop.Data), skyEffect);
             }
-            return (new GameScene(loaded.Data, items, environment, irradiance, team, sky, starDistance), cloudNames);
+            var particles = effects.Select((a, index) => new GameParticleEffect(a.Placement, new ParticleSystem(a.Definition, seed: index + 1),
+                    a.Definition.Emitters.Select(emitter => emitter.Text("MeshName").Length > 0 ? null : new GameEmitter(
+                        GameShaders.ForDrawing(_workspace, emitter.Text("PipelineEffectID", "Particle_Additive.fx")),
+                        emitter.List("textureName") is { Count: > 0 } t && t[0].Length > 0 ? Image(t[0]) : null,
+                        emitter.List("textureName") is { Count: > 1 } t2 && t2[1].Length > 0 ? Image(t2[1]) : null)).ToList()))
+                .ToList();
+            foreach (var effect in particles.SelectMany(p => p.Emitters).OfType<GameEmitter>().Select(e => e.Effect).DistinctBy(e => e.Name))
+            {
+                try { GameShaderCompiler.Compile(effect); }
+                catch (ShaderCompileException) { }
+            }
+            return (new GameScene(loaded.Data, items, environment, irradiance, team, sky, starDistance, particles, background), cloudNames);
         });
         if (version != _sceneVersion) return;
         if (!CloudPasses.SequenceEqual(cloudPasses)) CloudPasses = cloudPasses;
@@ -320,6 +548,7 @@ public sealed partial class MeshViewModel : PageViewModel
         _copyName = Name + "_Scaled";
         _unitsPerMeter = EditorSettings.Load().MeshUnitsPerMeter.ToString(CultureInfo.CurrentCulture);
         Shaders = GameShaders.All(workspace);
+        BrushNames = workspace.Index.Brushes.Entries.Keys.Order(StringComparer.OrdinalIgnoreCase).ToList();
         Skyboxes = GameShaders.Skyboxes(workspace);
         _skybox = Skyboxes.FirstOrDefault(s => s.Equals("skybox02", StringComparison.OrdinalIgnoreCase)) ?? Skyboxes.FirstOrDefault();
         _shader = GameShaders.ForMesh(workspace, Name);
@@ -452,6 +681,10 @@ public sealed partial class MeshViewModel : PageViewModel
                 p.MeshFileNames.Select(m => new MeshLink(m, new MeshTarget(Path.GetFileNameWithoutExtension(m)))).ToList(),
                 p.File is null)).ToList();
             var attached = await MeshLoader.AttachedMeshesAsync(_workspace, data);
+            _effects = await MeshLoader.AttachedEffectsAsync(_workspace, data);
+            ParticleEffectCount = _effects.Count;
+            ParticleDuration = Math.Max(4, _effects.Select(e => e.Definition.HasInfiniteLifeTime || e.Definition.TotalLifeTime <= 0 ? 10f : e.Definition.TotalLifeTime)
+                .DefaultIfEmpty(10f).Max());
             var textureCache = new Dictionary<string, IReadOnlyList<MeshTexture?>>(StringComparer.OrdinalIgnoreCase);
             var attachments = new List<MeshAttachment>();
             foreach (var a in attached)

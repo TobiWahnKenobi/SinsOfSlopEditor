@@ -4,8 +4,21 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using SinsEditor.Core.Textures;
 
 namespace SinsEditor.Viewer;
+
+/// <summary>What a picture of the view should be: its size, an optional background, transparent otherwise.</summary>
+public sealed record CaptureRequest(int Width, int Height, PixelImage? Background, int Supersample = 4);
+
+/// <summary>Lets a page ask the view for a picture (the view owns the renderer).</summary>
+public sealed class ViewportCapture
+{
+    internal Func<CaptureRequest, PixelImage?>? Handler { get; set; }
+
+    /// <summary>The scene as seen now, without hardpoints and wireframe; null if nothing can be drawn.</summary>
+    public PixelImage? Capture(CaptureRequest request) => Handler?.Invoke(request);
+}
 
 /// <summary>
 /// Shows a <see cref="GameScene"/> drawn by <see cref="GameRenderer"/> with the game's shaders. Drag to rotate (left or right
@@ -18,6 +31,30 @@ public sealed class GameMeshView : Grid
 
     public static readonly DependencyProperty ShowPointsProperty = DependencyProperty.Register(nameof(ShowPoints), typeof(bool), typeof(GameMeshView),
         new PropertyMetadata(true, (d, _) => ((GameMeshView)d).Invalidate()));
+
+    public static readonly DependencyProperty ShowParticlesProperty = DependencyProperty.Register(nameof(ShowParticles), typeof(bool), typeof(GameMeshView),
+        new PropertyMetadata(true, (d, _) => ((GameMeshView)d).Invalidate()));
+
+    /// <summary>Seconds into the particle effects. Changing it (also backwards) runs the simulations there.</summary>
+    public static readonly DependencyProperty ParticleTimeProperty = DependencyProperty.Register(nameof(ParticleTime), typeof(double), typeof(GameMeshView),
+        new FrameworkPropertyMetadata(3.0, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, _) => ((GameMeshView)d).OnParticleTimeChanged()));
+
+    /// <summary>While true, <see cref="ParticleTime"/> advances with real time × <see cref="PlaybackSpeed"/>, wrapping at <see cref="ParticleDuration"/>.</summary>
+    public static readonly DependencyProperty IsPlayingProperty = DependencyProperty.Register(nameof(IsPlaying), typeof(bool), typeof(GameMeshView),
+        new PropertyMetadata(false, (d, _) => ((GameMeshView)d).Invalidate()));
+
+    public static readonly DependencyProperty PlaybackSpeedProperty = DependencyProperty.Register(nameof(PlaybackSpeed), typeof(double), typeof(GameMeshView),
+        new PropertyMetadata(1.0));
+
+    public static readonly DependencyProperty ParticleDurationProperty = DependencyProperty.Register(nameof(ParticleDuration), typeof(double), typeof(GameMeshView),
+        new PropertyMetadata(10.0));
+
+    public static readonly DependencyProperty CaptureProperty = DependencyProperty.Register(nameof(Capture), typeof(ViewportCapture), typeof(GameMeshView),
+        new PropertyMetadata(null, (d, e) =>
+        {
+            if (e.OldValue is ViewportCapture old) old.Handler = null;
+            if (e.NewValue is ViewportCapture capture) capture.Handler = ((GameMeshView)d).CaptureImage;
+        }));
 
     public static readonly DependencyProperty ShowWireframeProperty = DependencyProperty.Register(nameof(ShowWireframe), typeof(bool), typeof(GameMeshView),
         new PropertyMetadata(false, (d, _) => ((GameMeshView)d).Invalidate()));
@@ -58,6 +95,101 @@ public sealed class GameMeshView : Grid
         set => SetValue(ShowPointsProperty, value);
     }
 
+    public bool ShowParticles
+    {
+        get => (bool)GetValue(ShowParticlesProperty);
+        set => SetValue(ShowParticlesProperty, value);
+    }
+
+    public double ParticleTime
+    {
+        get => (double)GetValue(ParticleTimeProperty);
+        set => SetValue(ParticleTimeProperty, value);
+    }
+
+    public bool IsPlaying
+    {
+        get => (bool)GetValue(IsPlayingProperty);
+        set => SetValue(IsPlayingProperty, value);
+    }
+
+    public double PlaybackSpeed
+    {
+        get => (double)GetValue(PlaybackSpeedProperty);
+        set => SetValue(PlaybackSpeedProperty, value);
+    }
+
+    public double ParticleDuration
+    {
+        get => (double)GetValue(ParticleDurationProperty);
+        set => SetValue(ParticleDurationProperty, value);
+    }
+
+    public ViewportCapture? Capture
+    {
+        get => (ViewportCapture?)GetValue(CaptureProperty);
+        set => SetValue(CaptureProperty, value);
+    }
+
+    private TimeSpan _lastFrame;
+
+    private void OnParticleTimeChanged()
+    {
+        foreach (var effect in Scene?.Particles ?? []) effect.System.RunTo((float)ParticleTime);
+        Invalidate();
+    }
+
+    /// <summary>A picture of the scene as seen now, rendered larger and scaled down for smooth edges; transparent without a background.</summary>
+    private PixelImage? CaptureImage(CaptureRequest request)
+    {
+        if (_renderer is null || Scene is null) return null;
+        int factor = Math.Max(1, Math.Min(request.Supersample, 4096 / Math.Max(request.Width, request.Height)));
+        int width = request.Width * factor, height = request.Height * factor;
+        byte[] pixels;
+        try
+        {
+            // A picture narrower than the view (e.g. a square icon from a wide view) would cut off what's seen at the sides:
+            // move back so the view's width fits.
+            double viewAspect = ActualWidth / Math.Max(1, ActualHeight), pictureAspect = (double)request.Width / request.Height;
+            var camera = pictureAspect < viewAspect ? _camera with { Distance = _camera.Distance * (float)(viewAspect / pictureAspect) } : _camera;
+            pixels = _renderer.Render(width, height, camera,
+                new GameRenderOptions(false, false, ShowParticles, Transparent: request.Background is null, Background: request.Background));
+        }
+        catch (SharpDX.SharpDXException ex)
+        {
+            ShowError($"Drawing failed: {ex.Message}");
+            return null;
+        }
+        Invalidate();
+        return factor == 1 ? new PixelImage(width, height, pixels) : Downsample(pixels, width, height, factor);
+    }
+
+    /// <summary>Box filter by an integer factor, averaging with premultiplied alpha so transparent edges don't darken.</summary>
+    private static PixelImage Downsample(byte[] source, int width, int height, int factor)
+    {
+        int w = width / factor, h = height / factor;
+        var result = new byte[w * h * 4];
+        for (int y = 0; y < h; y++)
+        for (int x = 0; x < w; x++)
+        {
+            double b = 0, g = 0, r = 0, a = 0;
+            for (int sy = 0; sy < factor; sy++)
+            for (int sx = 0; sx < factor; sx++)
+            {
+                int i = ((y * factor + sy) * width + x * factor + sx) * 4;
+                double alpha = source[i + 3] / 255.0;
+                b += source[i] * alpha; g += source[i + 1] * alpha; r += source[i + 2] * alpha; a += alpha;
+            }
+            int o = (y * w + x) * 4;
+            if (a > 0)
+            {
+                result[o] = (byte)Math.Round(b / a); result[o + 1] = (byte)Math.Round(g / a); result[o + 2] = (byte)Math.Round(r / a);
+            }
+            result[o + 3] = (byte)Math.Round(a / (factor * factor) * 255);
+        }
+        return new PixelImage(w, h, result);
+    }
+
     public bool ShowWireframe
     {
         get => (bool)GetValue(ShowWireframeProperty);
@@ -76,6 +208,7 @@ public sealed class GameMeshView : Grid
             _renderer.SetScene(scene);
             // Keep the camera when only options (team colour, skybox) change for the same mesh.
             if (old?.Primary != scene.Primary) _camera = OrbitCamera.Frame(scene.Primary);
+            foreach (var effect in scene.Particles ?? []) effect.System.RunTo((float)ParticleTime);
             ShowError(_renderer.Error);
         }
         catch (Exception e) when (e is SharpDX.SharpDXException or DllNotFoundException or ShaderCompileException)
@@ -108,6 +241,18 @@ public sealed class GameMeshView : Grid
 
     private void OnRendering(object? sender, EventArgs e)
     {
+        // Playback: advance the particle time by the frame's real time × speed.
+        var now = (e as RenderingEventArgs)?.RenderingTime ?? TimeSpan.Zero;
+        if (IsPlaying && Scene?.Particles is { Count: > 0 })
+        {
+            double dt = _lastFrame == TimeSpan.Zero ? 0 : Math.Min(0.1, (now - _lastFrame).TotalSeconds);
+            double time = ParticleTime + dt * PlaybackSpeed;
+            double duration = Math.Max(0.1, ParticleDuration);
+            ParticleTime = time > duration ? time % duration : time < 0 ? duration + time % duration : time;
+            _lastFrame = now;
+            _dirty = true;
+        }
+        else _lastFrame = TimeSpan.Zero;
         Unhook();
         if (!_dirty || _renderer is null || Scene is null || ActualWidth < 2 || ActualHeight < 2) return;
         _dirty = false;
@@ -116,7 +261,7 @@ public sealed class GameMeshView : Grid
         byte[] pixels;
         try
         {
-            pixels = _renderer.Render(width, height, _camera, new GameRenderOptions(ShowPoints, ShowWireframe));
+            pixels = _renderer.Render(width, height, _camera, new GameRenderOptions(ShowPoints, ShowWireframe, ShowParticles));
         }
         catch (SharpDX.SharpDXException ex)
         {
@@ -129,6 +274,8 @@ public sealed class GameMeshView : Grid
             _image.Source = _bitmap;
         }
         _bitmap.WritePixels(new Int32Rect(0, 0, width, height), pixels, width * 4, 0);
+        // Keep rendering frames while playing.
+        if (IsPlaying && Scene?.Particles is { Count: > 0 }) Invalidate();
     }
 
     protected override void OnMouseDown(MouseButtonEventArgs e)

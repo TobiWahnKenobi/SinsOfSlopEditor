@@ -27,6 +27,13 @@ public sealed partial class EffectFile
     public required IReadOnlyList<EffectTechnique> Techniques { get; init; }
     public required IReadOnlyDictionary<string, EffectSampler> Samplers { get; init; }
 
+    /// <summary>
+    /// A fixed-function technique (vertex shader, no pixel shader: the texture of <c>Texture[0]</c> times the vertex colour), as
+    /// the particle effects have; a renderer can emulate it with a generated pixel shader.
+    /// </summary>
+    public EffectTechnique? FixedFunctionTechnique =>
+        Techniques.FirstOrDefault(t => t.Passes.Count > 0 && t.Passes.All(p => p.VertexFunction != null && p.PixelFunction is null));
+
     /// <summary>The technique a renderer with pixel shaders uses: one whose first pass compiles shaders, preferably RenderWithPixelShader.</summary>
     public EffectTechnique? ShaderTechnique =>
         Techniques.FirstOrDefault(t => t.Name == "RenderWithPixelShader" && t.Passes.Count > 0 && t.Passes[0].HasShaders)
@@ -98,6 +105,9 @@ public sealed partial class EffectFile
             var states = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (Match s in State().Matches(CompileStatement().Replace(body, "")))
                 states[s.Groups[1].Value] = s.Groups[2].Value.Trim();
+            // Fixed-function texture stages: "Texture[0] = <g_TextureDiffuse0>;" → Texture0.
+            foreach (Match t in Regex.Matches(body, @"\bTexture\s*\[\s*(\d)\s*\]\s*=\s*<\s*(\w+)\s*>", RegexOptions.IgnoreCase))
+                states["Texture" + t.Groups[1].Value] = t.Groups[2].Value;
             passes.Add(new EffectPass(p.Groups[1].Value, vs, vsProfile, ps, psProfile, states));
         }
         return passes;
@@ -178,7 +188,9 @@ public static class GameShaders
     public static EffectFile ForDrawing(ModWorkspace workspace, string fxName)
     {
         var effect = Load(workspace, fxName);
-        return effect?.ShaderTechnique != null ? effect : Unlit(effect is null ? $"{fxName} (missing, drawn unlit)" : $"{fxName} (fixed function, drawn unlit)");
+        return effect?.ShaderTechnique != null || effect?.FixedFunctionTechnique != null
+            ? effect
+            : Unlit(effect is null ? $"{fxName} (missing, drawn unlit)" : $"{fxName} (no usable technique, drawn unlit)");
     }
 
     /// <summary>The skyboxes whose environment cube maps exist (skyboxNNenvironmentcube + skyboxNNirradiance).</summary>

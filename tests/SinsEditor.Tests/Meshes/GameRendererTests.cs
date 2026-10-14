@@ -152,4 +152,66 @@ public sealed class GameRendererTests(ITestOutputHelper output) : IAsyncLifetime
         // The ship covers about a tenth of the picture; with the light inside the star's radius everything saturated (0.03).
         Assert.True(diff / (double)a.Length > 0.15, "the skybox has no effect on the ship");
     }
+
+    [SkippableFact]
+    public async Task Flair_particles_simulate_and_draw()
+    {
+        Skip.If(_workspace is null, "Game directory not configured.");
+        var ws = _workspace!;
+        var mesh = (await MeshLoader.LoadAsync(ws, "StarBasePsi-Culture"))!.Data;
+        var effects = await MeshLoader.AttachedEffectsAsync(ws, mesh);
+        Assert.NotEmpty(effects);
+        foreach (var effect in effects.DistinctBy(e => e.Particle))
+        {
+            var system = new ParticleSystem(effect.Definition);
+            var counts = new List<int>();
+            for (int t = 1; t <= 8; t++) { system.RunTo(t * 0.5f); counts.Add(system.Particles.Count); }
+            output.WriteLine($"{effect.Particle}: {effect.Definition.Emitters.Count} emitters ({string.Join(", ", effect.Definition.Emitters.Select(e => $"{e.Type} {e.Text("PipelineEffectID")} rate {e.Float("EmitRate")} life {e.Float("ParticleLifeTime")} size {e.Float("ParticleWidth")}"))}); particles at 0.5 s steps: {string.Join(" ", counts)}");
+        }
+
+        GameMaterial Mat(MeshMaterial m) => GameMaterial.From(m, n => MeshLoader.LoadTexture(ws, n));
+        var particles = effects.Select((a, index) => new GameParticleEffect(a.Placement, new ParticleSystem(a.Definition, seed: index + 1),
+            a.Definition.Emitters.Select(e => e.Text("MeshName").Length > 0 ? null : new GameEmitter(
+                GameShaders.ForDrawing(ws, e.Text("PipelineEffectID", "Particle_Additive.fx")),
+                e.List("textureName") is { Count: > 0 } t && t[0].Length > 0 ? MeshLoader.LoadTexture(ws, t[0]) : null, null)).ToList())).ToList();
+        foreach (var p in particles) p.System.RunTo(3.5f);
+        var scene = new GameScene(mesh, [], null, null, new(0.2f, 0.4f, 0.9f, 1), Particles: particles);
+        using var renderer = new GameRenderer();
+        renderer.SetScene(scene);
+        var pixels = renderer.Render(400, 300, OrbitCamera.Frame(mesh), new GameRenderOptions(false, false));
+        int lit = 0;
+        for (int i = 0; i < pixels.Length; i += 4) if (pixels[i] + pixels[i + 1] + pixels[i + 2] > 120) lit++;
+        output.WriteLine($"particles alive {particles.Sum(p => p.System.Particles.Count)}, lit pixels {lit}, error {renderer.Error}");
+        if (Environment.GetEnvironmentVariable("SINSEDITOR_REPORT") is { } dir)
+        {
+            for (int i = 3; i < pixels.Length; i += 4) pixels[i] = 255;
+            PngWriter.Save(new PixelImage(400, 300, pixels), Path.Combine(Path.GetDirectoryName(dir)!, "render_particles.png"));
+        }
+        Assert.Null(renderer.Error);
+        Assert.True(lit > 50, $"only {lit} lit pixels");
+    }
+
+    [SkippableFact]
+    public async Task Transparent_pictures_have_the_mesh_opaque_and_the_rest_clear()
+    {
+        Skip.If(_workspace is null, "Game directory not configured.");
+        var ws = _workspace!;
+        var mesh = (await MeshLoader.LoadAsync(ws, "Frigate_PhaseAntiFighter"))!.Data;
+        var scene = new GameScene(mesh, [new GameSceneItem(mesh, System.Numerics.Matrix4x4.Identity,
+            mesh.Materials.Select(m => GameMaterial.From(m, n => MeshLoader.LoadTexture(ws, n))).ToList(), GameShaders.ForDrawing(ws, "GS_ShadowedShip.fx"))],
+            null, null, new(0.2f, 0.4f, 0.9f, 1));
+        using var renderer = new GameRenderer();
+        renderer.SetScene(scene);
+        var pixels = renderer.Render(200, 150, OrbitCamera.Frame(mesh), new GameRenderOptions(true, false, Transparent: true));
+        Assert.Equal(0, pixels[3]);                                     // corner
+        Assert.Equal(255, pixels[(75 * 200 + 100) * 4 + 3]);           // centre of the ship
+        int opaque = 0;
+        for (int i = 3; i < pixels.Length; i += 4) if (pixels[i] == 255) opaque++;
+        Assert.InRange(opaque, 200 * 150 / 20, 200 * 150 / 2);
+
+        // A background makes it opaque everywhere.
+        var background = new PixelImage(4, 4, Enumerable.Repeat((byte)200, 64).ToArray());
+        var withBackground = renderer.Render(200, 150, OrbitCamera.Frame(mesh), new GameRenderOptions(false, false, Background: background));
+        Assert.Equal(200, withBackground[0]);
+    }
 }

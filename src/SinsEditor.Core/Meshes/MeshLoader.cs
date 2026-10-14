@@ -13,6 +13,9 @@ public sealed record LoadedMesh(string Name, ResolvedFile File, MeshData Data);
 public sealed record AttachedMesh(string PointName, string Particle, ResolvedFile ParticleFile, string MeshFileName, LoadedMesh Mesh, Matrix4x4 Placement,
     string Effect = "");
 
+/// <summary>A particle effect on a <c>Flair-</c> hardpoint: where it sits on the mesh and what it is.</summary>
+public sealed record AttachedEffect(string PointName, string Particle, Matrix4x4 Placement, ParticleEffectDefinition Definition);
+
 /// <summary>A particle attached through a <c>Flair-</c> hardpoint, and the meshes its emitters show.</summary>
 public sealed record AttachedParticle(string Name, ResolvedFile? File, IReadOnlyList<string> MeshFileNames);
 
@@ -60,6 +63,24 @@ public static class MeshLoader
                 var placement = MeshMath.Placement(emitter.Orientation, emitter.Position) * pointPlacement;
                 result.Add(new AttachedMesh(point.Name, name, file, emitter.MeshName, loaded, placement, emitter.Effect));
             }
+        }
+        return result;
+    }
+
+    /// <summary>Every particle effect on the mesh's <c>Flair-</c> hardpoints (one per hardpoint), for simulating its sprites.</summary>
+    public static async Task<IReadOnlyList<AttachedEffect>> AttachedEffectsAsync(ModWorkspace workspace, MeshData mesh, CancellationToken ct = default)
+    {
+        var result = new List<AttachedEffect>();
+        var definitions = new Dictionary<string, ParticleEffectDefinition>(StringComparer.OrdinalIgnoreCase);
+        foreach (var point in mesh.Points)
+        {
+            if (point.FlairParticle is not { } name || workspace.Index.Particles.GetValueOrDefault(name) is not { } file) continue;
+            if (!definitions.TryGetValue(name, out var definition))
+            {
+                string text = await workspace.Cache.GetTextPathAsync(file.AbsolutePath, ct);
+                definitions[name] = definition = await Task.Run(() => ParticleEffectDefinition.Load(text), ct);
+            }
+            result.Add(new AttachedEffect(point.Name, name, MeshMath.Placement(point.Orientation, point.Position), definition));
         }
         return result;
     }

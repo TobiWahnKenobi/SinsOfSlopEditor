@@ -14,7 +14,12 @@ using MapFlags = SharpDX.Direct3D11.MapFlags;
 namespace SinsEditor.Viewer;
 
 /// <summary>Display options of the game-shader view.</summary>
-public sealed record GameRenderOptions(bool ShowPoints, bool Wireframe);
+/// <summary>
+/// Display options of the game-shader view. <paramref name="Transparent"/> renders without skybox or background and gives
+/// the picture an alpha channel (mesh coverage, particle brightness), for exporting images.
+/// </summary>
+public sealed record GameRenderOptions(bool ShowPoints, bool Wireframe, bool ShowParticles = true, bool Transparent = false,
+    PixelImage? Background = null);
 
 /// <summary>
 /// Draws a <see cref="GameScene"/> with the game's own shaders on Direct3D 11, offscreen, and returns the picture as BGRA
@@ -55,6 +60,18 @@ public sealed class GameRenderer : IDisposable
         float4 Flat(VO i) : SV_Target { return Color * (0.65 + 0.35 * saturate(dot(normalize(i.n), normalize(float3(-0.4, 0.8, 0.5))))); }
         float4 Wire(VO i) : SV_Target { return Color; }
         float Depth(VO i) : SV_Target { return i.d; }
+        Texture2D BackgroundTexture : register(t0);
+        SamplerState BackgroundSampler : register(s0);
+        struct BO { float4 p : SV_Position; float2 uv : TEXCOORD0; };
+        BO BackgroundVS(uint id : SV_VertexID)
+        {
+            BO o;
+            float2 t = float2((id << 1) & 2, id & 2);
+            o.p = float4(t * float2(2, -2) + float2(-1, 1), 0, 1);
+            o.uv = t * Color.xy + Color.zw;
+            return o;
+        }
+        float4 BackgroundPS(BO i) : SV_Target { return BackgroundTexture.Sample(BackgroundSampler, i.uv); }
         """;
 
     private sealed class StageInfo
@@ -110,14 +127,16 @@ public sealed class GameRenderer : IDisposable
     private readonly InputLayout _helperLayout;
     private readonly Buffer _helperCb;
     private readonly RasterizerState _solid, _wireRaster, _noCull;
-    private readonly DepthStencilState _depthOn, _depthRead;
+    private readonly DepthStencilState _depthOn, _depthRead, _noDepth;
     private readonly BlendState _opaque;
     private GameScene? _scene;
 
     // Targets, recreated on resize.
     private int _width, _height;
-    private Texture2D? _color, _resolved, _staging, _depthBuffer;
-    private RenderTargetView? _colorView;
+    private Texture2D? _color, _resolved, _staging, _depthBuffer, _mask, _maskResolved, _maskStaging;
+    private RenderTargetView? _colorView, _maskView;
+    private VertexShader? _backgroundVs;
+    private PixelShader? _backgroundPs;
     private DepthStencilView? _depthView;
 
     // Shadow map from the light.
@@ -153,6 +172,8 @@ public sealed class GameRenderer : IDisposable
         _flatPs = new PixelShader(_device, CompileHelper("Flat", "ps_4_0"));
         _wirePs = new PixelShader(_device, CompileHelper("Wire", "ps_4_0"));
         _depthPs = new PixelShader(_device, CompileHelper("Depth", "ps_4_0"));
+        _backgroundVs = new VertexShader(_device, CompileHelper("BackgroundVS", "vs_4_0"));
+        _backgroundPs = new PixelShader(_device, CompileHelper("BackgroundPS", "ps_4_0"));
         _helperCb = new Buffer(_device, 80, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
 
         _solid = Raster(CullMode.Back, FillMode.Solid);
@@ -167,6 +188,7 @@ public sealed class GameRenderer : IDisposable
         _depthRead = new DepthStencilState(_device, new DepthStencilStateDescription
             { IsDepthEnabled = true, DepthWriteMask = DepthWriteMask.Zero, DepthComparison = Comparison.LessEqual });
         _opaque = new BlendState(_device, BlendStateDescription.Default());
+        _noDepth = new DepthStencilState(_device, new DepthStencilStateDescription { IsDepthEnabled = false, DepthWriteMask = DepthWriteMask.Zero });
 
         _shadow = new Texture2D(_device, new Texture2DDescription
         {
@@ -525,6 +547,23 @@ public sealed class GameRenderer : IDisposable
             Width = width, Height = height, MipLevels = 1, ArraySize = 1, Format = Format.B8G8R8A8_UNorm,
             SampleDescription = new SampleDescription(1, 0), Usage = ResourceUsage.Default,
         });
+        // Coverage of the meshes, for transparent pictures.
+        _mask = new Texture2D(_device, new Texture2DDescription
+        {
+            Width = width, Height = height, MipLevels = 1, ArraySize = 1, Format = Format.R8G8B8A8_UNorm,
+            SampleDescription = new SampleDescription(Msaa, 0), Usage = ResourceUsage.Default, BindFlags = BindFlags.RenderTarget,
+        });
+        _maskView = new RenderTargetView(_device, _mask);
+        _maskResolved = new Texture2D(_device, new Texture2DDescription
+        {
+            Width = width, Height = height, MipLevels = 1, ArraySize = 1, Format = Format.R8G8B8A8_UNorm,
+            SampleDescription = new SampleDescription(1, 0), Usage = ResourceUsage.Default,
+        });
+        _maskStaging = new Texture2D(_device, new Texture2DDescription
+        {
+            Width = width, Height = height, MipLevels = 1, ArraySize = 1, Format = Format.R8G8B8A8_UNorm,
+            SampleDescription = new SampleDescription(1, 0), Usage = ResourceUsage.Staging, CpuAccessFlags = CpuAccessFlags.Read,
+        });
         _staging = new Texture2D(_device, new Texture2DDescription
         {
             Width = width, Height = height, MipLevels = 1, ArraySize = 1, Format = Format.B8G8R8A8_UNorm,
@@ -535,6 +574,7 @@ public sealed class GameRenderer : IDisposable
     private void DisposeTargets()
     {
         _colorView?.Dispose(); _color?.Dispose(); _depthView?.Dispose(); _depthBuffer?.Dispose(); _resolved?.Dispose(); _staging?.Dispose();
+        _maskView?.Dispose(); _mask?.Dispose(); _maskResolved?.Dispose(); _maskStaging?.Dispose();
         _colorView = null; _color = null;
     }
 
@@ -586,12 +626,14 @@ public sealed class GameRenderer : IDisposable
 
         _context.OutputMerger.SetTargets(_depthView, _colorView);
         _context.Rasterizer.SetViewport(new RawViewportF { X = 0, Y = 0, Width = width, Height = height, MinDepth = 0, MaxDepth = 1 });
-        // Space behind a skybox is black; without one, the editor's dark grey.
-        _context.ClearRenderTargetView(_colorView, _skybox is null ? new RawColor4(0.118f, 0.118f, 0.133f, 1f) : new RawColor4(0, 0, 0, 1f));
+        // Space behind a skybox is black; without one, the editor's dark grey; transparent pictures start empty.
+        _context.ClearRenderTargetView(_colorView, options.Transparent ? new RawColor4(0, 0, 0, 0)
+            : _skybox is null && (options.Background ?? scene?.Background) is null ? new RawColor4(0.118f, 0.118f, 0.133f, 1f) : new RawColor4(0, 0, 0, 1f));
         _context.ClearDepthStencilView(_depthView, DepthStencilClearFlags.Depth | DepthStencilClearFlags.Stencil, 1f, 0);
         _context.InputAssembler.PrimitiveTopology = PrimitiveTopology.TriangleList;
 
-        if (_skybox is { } sky)
+        if (!options.Transparent && (options.Background ?? scene?.Background) is { } background) DrawBackground(background, width, height);
+        else if (!options.Transparent && options.Background is null && _skybox is { } sky)
         {
             // Around the camera, between the clipping planes; its passes draw without depth. The camera is inside it, looking
             // at its inner faces, so nothing is culled.
@@ -607,6 +649,13 @@ public sealed class GameRenderer : IDisposable
                 DrawHelper(item.Vertices, item.Groups.Select(g => (g.Indices, g.Count)), world * view * projection, new Vector4(0.35f, 0.8f, 1f, 1f), _wirePs, _wireRaster, _depthRead);
         }
 
+        if (options.Transparent) RenderMask(cameraOffset * view * projection);
+        if (options.ShowParticles && scene?.Particles is { } particles)
+        {
+            _context.OutputMerger.SetTargets(_depthView, _colorView);
+            DrawParticles(particles, view, projection, eye);
+        }
+
         if (options.ShowPoints)
         {
             var wvp = cameraOffset * view * projection;
@@ -620,9 +669,137 @@ public sealed class GameRenderer : IDisposable
         var pixels = new byte[width * height * 4];
         for (int y = 0; y < height; y++) Marshal.Copy(box.DataPointer + y * box.RowPitch, pixels, y * width * 4, width * 4);
         _context.UnmapSubresource(_staging, 0);
+        if (options.Transparent) ApplyMask(pixels, width, height);
         if (_device.DeviceRemovedReason.Failure)
             throw new SharpDX.SharpDXException(_device.DeviceRemovedReason, "The GPU stopped drawing (a shader took too long or failed).");
         return pixels;
+    }
+
+    /// <summary>A fixed 2D picture filling the view (cropped to keep its proportions), behind everything.</summary>
+    private void DrawBackground(PixelImage image, int width, int height)
+    {
+        float imageAspect = (float)image.Width / image.Height, viewAspect = (float)width / height;
+        var scale = imageAspect > viewAspect ? new Vector2(viewAspect / imageAspect, 1) : new Vector2(1, imageAspect / viewAspect);
+        var offset = (Vector2.One - scale) / 2;
+        var data = new float[20];
+        data[16] = scale.X; data[17] = scale.Y; data[18] = offset.X; data[19] = offset.Y;
+        _context.UpdateSubresource(data, _helperCb);
+        _context.InputAssembler.InputLayout = null;
+        _context.VertexShader.Set(_backgroundVs);
+        _context.VertexShader.SetConstantBuffer(0, _helperCb);
+        _context.PixelShader.Set(_backgroundPs);
+        _context.PixelShader.SetShaderResource(0, TextureView(image));
+        _context.PixelShader.SetSampler(0, Sampler(true, false));
+        _context.OutputMerger.SetBlendState(_opaque);
+        _context.OutputMerger.SetDepthStencilState(_noDepth);
+        _context.Rasterizer.State = _noCull;
+        _context.Draw(3, 0);
+    }
+
+    /// <summary>Mesh coverage as white on black, using the depth of the colour pass (only visible surfaces), for the alpha channel.</summary>
+    private void RenderMask(Matrix4x4 cameraViewProjection)
+    {
+        _context.OutputMerger.SetTargets(_depthView, _maskView);
+        _context.ClearRenderTargetView(_maskView, new RawColor4(0, 0, 0, 0));
+        foreach (var item in _items)
+            DrawHelper(item.Vertices, item.Groups.Select(g => (g.Indices, g.Count)), item.Item.Placement * cameraViewProjection, Vector4.One, _wirePs, _noCull, _depthRead);
+        _context.OutputMerger.SetTargets(_depthView, _colorView);
+    }
+
+    /// <summary>Alpha = mesh coverage, or the brightness of what particles added; colours are un-premultiplied.</summary>
+    private void ApplyMask(byte[] pixels, int width, int height)
+    {
+        _context.ResolveSubresource(_mask, 0, _maskResolved, 0, Format.R8G8B8A8_UNorm);
+        _context.CopyResource(_maskResolved, _maskStaging);
+        var box = _context.MapSubresource(_maskStaging, 0, MapMode.Read, MapFlags.None);
+        var mask = new byte[width * height * 4];
+        for (int y = 0; y < height; y++) Marshal.Copy(box.DataPointer + y * box.RowPitch, mask, y * width * 4, width * 4);
+        _context.UnmapSubresource(_maskStaging, 0);
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            int alpha = Math.Max(mask[i], Math.Max(pixels[i], Math.Max(pixels[i + 1], pixels[i + 2])));
+            if (alpha > 0 && alpha < 255)
+            {
+                for (int c = 0; c < 3; c++) pixels[i + c] = (byte)Math.Min(255, pixels[i + c] * 255 / alpha);
+            }
+            pixels[i + 3] = (byte)alpha;
+        }
+    }
+
+    /// <summary>
+    /// Particle sprites: camera-facing quads in camera-relative world space (the particle effects' vertex shaders take
+    /// world positions and g_ViewProjection), drawn with their effect's passes and blend states, sorted back to front.
+    /// </summary>
+    private void DrawParticles(IReadOnlyList<GameParticleEffect> effects, Matrix4x4 view, Matrix4x4 projection, Vector3 eye)
+    {
+        var right = new Vector3(view.M11, view.M21, view.M31);
+        var up = new Vector3(view.M12, view.M22, view.M32);
+        var forward = new Vector3(view.M13, view.M23, view.M33);
+        foreach (var effect in effects)
+        {
+            for (int e = 0; e < effect.Emitters.Count; e++)
+            {
+                if (effect.Emitters[e] is not { } emitter) continue;
+                IReadOnlyList<GpuPass> passes;
+                try { passes = EffectPasses(emitter.Effect); }
+                catch (Exception ex) when (ex is ShaderCompileException or SharpDX.SharpDXException) { Error ??= ex.Message; continue; }
+
+                var particles = effect.System.Particles.Where(p => p.Emitter == e && p.Color.W > 0.001f && p.Width > 0)
+                    .Select(p => (Particle: p, Center: Vector3.Transform(p.Position, effect.Placement) - eye))
+                    .OrderByDescending(x => Vector3.Dot(x.Center, forward)).ToList();
+                if (particles.Count == 0) continue;
+
+                var vertices = new Vertex[particles.Count * 4];
+                var indices = new int[particles.Count * 6];
+                for (int i = 0; i < particles.Count; i++)
+                {
+                    var (p, center) = particles[i];
+                    float cos = MathF.Cos(p.Rotation), sin = MathF.Sin(p.Rotation);
+                    var axisX = (right * cos + up * sin) * p.Width / 2;
+                    var axisY = (up * cos - right * sin) * p.Height / 2;
+                    var c = p.Color;
+                    uint color = (uint)(Math.Clamp(c.X, 0, 1) * 255) | (uint)(Math.Clamp(c.Y, 0, 1) * 255) << 8
+                               | (uint)(Math.Clamp(c.Z, 0, 1) * 255) << 16 | (uint)(Math.Clamp(c.W, 0, 1) * 255) << 24;
+                    vertices[i * 4] = new Vertex { Position = center - axisX + axisY, Uv0 = new(0, 0), Uv1 = new(0, 0), Color = color, Normal = -forward };
+                    vertices[i * 4 + 1] = new Vertex { Position = center + axisX + axisY, Uv0 = new(1, 0), Uv1 = new(1, 0), Color = color, Normal = -forward };
+                    vertices[i * 4 + 2] = new Vertex { Position = center + axisX - axisY, Uv0 = new(1, 1), Uv1 = new(1, 1), Color = color, Normal = -forward };
+                    vertices[i * 4 + 3] = new Vertex { Position = center - axisX - axisY, Uv0 = new(0, 1), Uv1 = new(0, 1), Color = color, Normal = -forward };
+                    int[] quad = [0, 1, 2, 0, 2, 3];
+                    for (int k = 0; k < 6; k++) indices[i * 6 + k] = i * 4 + quad[k];
+                }
+                using var vertexBuffer = Buffer.Create(_device, BindFlags.VertexBuffer, vertices);
+                using var indexBuffer = Buffer.Create(_device, BindFlags.IndexBuffer, indices);
+                var textures = new Dictionary<string, PixelImage>();
+                if (emitter.Texture0 is { } t0) { textures["g_TextureDiffuse0"] = t0; textures["g_TextureDiffuse1"] = emitter.Texture1 ?? t0; }
+                var values = new Dictionary<string, float[]>(StringComparer.Ordinal)
+                {
+                    ["g_ViewProjection"] = M(view * projection),
+                    ["g_World"] = M(Matrix4x4.Identity),
+                    ["g_WorldViewProjection"] = M(view * projection),
+                    ["g_View"] = M(view),
+                    ["g_Projection"] = M(projection),
+                    ["colorMultiplier"] = [1f],
+                };
+                _context.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(vertexBuffer, Stride, 0));
+                _context.InputAssembler.SetIndexBuffer(indexBuffer, Format.R32_UInt, 0);
+                foreach (var pass in passes)
+                {
+                    _context.InputAssembler.InputLayout = pass.InputLayout;
+                    _context.VertexShader.Set(pass.Vs);
+                    _context.PixelShader.Set(pass.Ps);
+                    FillConstants(pass.VsInfo, pass.VsCb, values);
+                    FillConstants(pass.PsInfo, pass.PsCb, values);
+                    _context.VertexShader.SetConstantBuffer(0, pass.VsCb);
+                    _context.PixelShader.SetConstantBuffer(0, pass.PsCb);
+                    BindResources(pass.VsInfo, emitter.Effect.Samplers, null, textures, _context.VertexShader);
+                    BindResources(pass.PsInfo, emitter.Effect.Samplers, null, textures, _context.PixelShader);
+                    _context.OutputMerger.SetBlendState(pass.Blend);
+                    _context.OutputMerger.SetDepthStencilState(_depthRead);
+                    _context.Rasterizer.State = _noCull;
+                    _context.DrawIndexed(indices.Length, 0, 0);
+                }
+            }
+        }
     }
 
     /// <summary>Draws a mesh with every pass of its effect, filling the engine's constants by name.</summary>
@@ -767,6 +944,7 @@ public sealed class GameRenderer : IDisposable
         _helperVs.Dispose(); _flatPs.Dispose(); _wirePs.Dispose(); _depthPs.Dispose(); _helperLayout.Dispose(); _helperCb.Dispose();
         _solid.Dispose(); _noCull.Dispose(); _wireRaster.Dispose(); _depthOn.Dispose(); _depthRead.Dispose(); _opaque.Dispose();
         _noise3D.Dispose();
+        _noDepth.Dispose(); _backgroundVs?.Dispose(); _backgroundPs?.Dispose();
         _context.Dispose();
         _device.Dispose();
     }

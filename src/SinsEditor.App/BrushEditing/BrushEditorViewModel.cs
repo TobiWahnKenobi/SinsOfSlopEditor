@@ -114,6 +114,15 @@ public sealed partial class BrushEditorViewModel : PageViewModel
         }
         NewBrushesFile = $"{workspace.ModName}.brushes";
         RebuildSlots();
+        // An image handed over from elsewhere (e.g. a picture from the mesh view) becomes the Normal image.
+        if (PendingImport is { } pending && Slots.FirstOrDefault(slot => slot.IsNormal) is { } normal)
+        {
+            PendingImport = null;
+            normal.Imported = pending.Image;
+            normal.ImportedFile = pending.Source;
+            if (Width <= 0 || Height <= 0) (Width, Height) = (pending.Image.Width, pending.Image.Height);
+            if (Brush != null) DeriveStates = true;
+        }
         _ = ReplanAsync();
     }
 
@@ -169,6 +178,9 @@ public sealed partial class BrushEditorViewModel : PageViewModel
             Slots.Add(new StateSlot(state, pixels is { Width: > 0 } ? ImageConverter.ToBitmap(pixels) : null, pixels));
         }
     }
+
+    /// <summary>An image the next brush editor page takes as its Normal image (set before navigating to it).</summary>
+    public static (PixelImage Image, string Source)? PendingImport { get; set; }
 
     [RelayCommand]
     private void ImportImage(StateSlot? slot)

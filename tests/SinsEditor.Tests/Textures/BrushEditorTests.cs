@@ -201,4 +201,18 @@ public sealed class BrushEditorTests : IAsyncLifetime
         Assert.Contains("brushFile \"MyIcons.brushes\"", File.ReadAllText(Path.Combine(_mod, "brush.manifest")));
         Assert.Equal(TextureFileFormat.Tga32, TextureFormats.Detect(Path.Combine(_mod, "Textures", "MyNewAtlas.tga")));
     }
+
+    [SkippableFact]
+    public void A_picture_handed_over_becomes_the_normal_image()
+    {
+        var ws = Workspace;
+        var picture = Solid(64, 48, 10, 120, 240);
+        SinsEditor.App.BrushEditing.BrushEditorViewModel.PendingImport = (picture, "view of a mesh");
+        var vm = new SinsEditor.App.BrushEditing.BrushEditorViewModel(ws, "SHEET_A", _ => { }, () => Task.CompletedTask);
+        var normal = vm.Slots.Single(slot => slot.IsNormal);
+        Assert.Same(picture, normal.Imported);
+        Assert.Equal("view of a mesh", normal.ImportedFile);
+        Assert.True(vm.DeriveStates);
+        Assert.Null(SinsEditor.App.BrushEditing.BrushEditorViewModel.PendingImport);
+    }
 }
