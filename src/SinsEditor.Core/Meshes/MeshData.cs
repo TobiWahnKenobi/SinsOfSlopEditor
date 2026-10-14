@@ -7,12 +7,13 @@ public sealed record MeshMaterial(string Diffuse, string SelfIllumination, strin
 
 /// <summary>
 /// A hardpoint: weapons, exhausts, ability and effect attachment points (<c>Weapon-0</c>, <c>Exhaust</c>, <c>Center</c> …).
-/// <paramref name="Orientation"/> holds the three rows of the file's orientation matrix as its first three rows
-/// (row 1 is the forward direction); <c>Flair-&lt;particle&gt;</c> points attach a particle with it.
+/// <paramref name="Orientation"/> holds the three rows of the file's orientation matrix as its first three rows: the
+/// point's local X, Y and Z axes. Z (the third row) is the direction it faces: exhausts point back, side weapons outward.
+/// <c>Flair-&lt;particle&gt;</c> points attach a particle with it.
 /// </summary>
 public sealed record MeshPoint(string Name, Vector3 Position, Matrix4x4 Orientation)
 {
-    public Vector3 Forward => new(Orientation.M11, Orientation.M12, Orientation.M13);
+    public Vector3 Forward => new(Orientation.M31, Orientation.M32, Orientation.M33);
 
     /// <summary>The particle a <c>Flair-</c> point attaches, if it is one.</summary>
     public string? FlairParticle => Name.StartsWith("Flair-", StringComparison.OrdinalIgnoreCase) && Name.Length > 6 ? Name[6..] : null;

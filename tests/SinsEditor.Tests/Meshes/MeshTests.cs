@@ -90,4 +90,13 @@ public sealed class MeshTests : IAsyncLifetime
         Assert.Equal(0.5f, MeshScaler.FactorFor(mesh, MeshAxis.Height, 5, 1));
         Assert.Null(MeshScaler.FactorFor(mesh, MeshAxis.Length, 0, 1));
     }
+
+    [Fact]
+    public void Hardpoints_face_along_their_z_axis()
+    {
+        // An exhaust of a game frigate: X and Z turned around, so it faces back (-Z).
+        var mesh = MeshData.Parse(["MeshData", "	NumPoints 1", "	Point", "		DataString \"Exhaust\"", "		Position [ 0.0 0.0 -40.0 ]",
+            "		Orientation", "			 [ -1.000000 0.000000 -0.000000 ]", "			 [ 0.000000 1.000000 0.000000 ]", "			 [ 0.000000 0.000000 -1.000000 ]"]);
+        Assert.Equal(new Vector3(0, 0, -1), Assert.Single(mesh.Points).Forward);
+    }
 }
