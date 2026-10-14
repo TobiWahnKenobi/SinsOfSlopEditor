@@ -45,6 +45,7 @@ public partial class App : Application
         var window = new MainWindow(shell);
         MainWindow = window;
         ShutdownMode = ShutdownMode.OnMainWindowClose;
+        window.Closed += (_, _) => Shutdown();
         window.Show();
 
         await shell.OpenAsync(options);
@@ -84,6 +85,17 @@ public partial class App : Application
             SaveScreenshot(window, file);
             Shutdown(shell.LoadError is null ? 0 : 1);
         }
+    }
+
+    /// <summary>
+    /// Ends the process once the app has shut down. Unsaved changes are settled before the main window closes and settings
+    /// are written as they change, so nothing is lost; a stray foreground thread (a library's or a background task's)
+    /// must not keep a windowless editor running and its files locked.
+    /// </summary>
+    protected override void OnExit(ExitEventArgs e)
+    {
+        base.OnExit(e);
+        Environment.Exit(e.ApplicationExitCode);
     }
 
     public WorkspaceOptions? ShowOpenModDialog(Window? owner)
