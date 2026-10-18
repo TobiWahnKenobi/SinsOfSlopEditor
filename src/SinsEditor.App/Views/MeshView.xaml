@@ -247,10 +247,120 @@
 
         <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
 
-        <viewer:GameMeshView Grid.Column="2" Scene="{Binding GameScene}" ShowPoints="{Binding ShowPoints}" ShowWireframe="{Binding ShowWireframe}"
-                             ShowParticles="{Binding ShowParticles}" ParticleTime="{Binding ParticleTime}" IsPlaying="{Binding IsPlaying}"
-                             PlaybackSpeed="{Binding PlaybackSpeed}" ParticleDuration="{Binding ParticleDuration}" Capture="{Binding Capture}"
-                             Visibility="{Binding UseGameShaders, Converter={StaticResource BoolToVisibility}}" />
+        <Grid Grid.Column="2" ClipToBounds="True" Visibility="{Binding UseGameShaders, Converter={StaticResource BoolToVisibility}}">
+            <viewer:GameMeshView Scene="{Binding GameScene}" ShowPoints="{Binding ShowPoints}" ShowWireframe="{Binding ShowWireframe}"
+                                 ShowParticles="{Binding ShowParticles}" ParticleTime="{Binding ParticleTime}" IsPlaying="{Binding IsPlaying}"
+                                 PlaybackSpeed="{Binding PlaybackSpeed}" ParticleDuration="{Binding ParticleDuration}" Capture="{Binding Capture}"
+                                 Camera="{Binding Camera}" />
+
+            <!-- View palette: slides in from the right. -->
+            <ToggleButton HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0" Padding="8,4" Panel.ZIndex="2"
+                          IsChecked="{Binding IsPaletteOpen}" ToolTip="View: reset, top-down, rotate, move, field of view, stored views">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE890;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" VerticalAlignment="Center" Margin="0,0,6,0" />
+                    <TextBlock Text="View" />
+                </StackPanel>
+            </ToggleButton>
+            <Border Width="310" HorizontalAlignment="Right" Margin="0,44,8,8" VerticalAlignment="Top" Panel.ZIndex="1"
+                    Padding="12" Background="{DynamicResource SolidBackgroundFillColorBaseBrush}">
+                <Border.RenderTransform>
+                    <TranslateTransform X="330" />
+                </Border.RenderTransform>
+                <Border.Style>
+                    <Style TargetType="Border" BasedOn="{StaticResource Card}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsPaletteOpen}" Value="True">
+                                <DataTrigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetProperty="RenderTransform.X" To="0" Duration="0:0:0.18">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseOut" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </DataTrigger.EnterActions>
+                                <DataTrigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetProperty="RenderTransform.X" To="330" Duration="0:0:0.15">
+                                                <DoubleAnimation.EasingFunction>
+                                                    <CubicEase EasingMode="EaseIn" />
+                                                </DoubleAnimation.EasingFunction>
+                                            </DoubleAnimation>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </DataTrigger.ExitActions>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="640">
+                    <StackPanel>
+                        <TextBlock Text="View" Style="{StaticResource SectionHeader}" Margin="0,0,0,6" />
+                        <WrapPanel Margin="0,0,0,8">
+                            <Button Content="Reset" Command="{Binding ResetViewCommand}" Margin="0,0,4,4" ToolTip="Front-left, above, the whole mesh in view (also: double-click the view)" />
+                            <Button Content="Top-down" Command="{Binding TopDownViewCommand}" Margin="0,0,4,4" ToolTip="From above, bow up" />
+                            <Button Content="Front" Command="{Binding FrontViewCommand}" Margin="0,0,4,4" />
+                            <Button Content="Side" Command="{Binding SideViewCommand}" Margin="0,0,4,4" />
+                            <Button Content="Back" Command="{Binding BackViewCommand}" Margin="0,0,4,4" />
+                        </WrapPanel>
+
+                        <DockPanel Margin="0,0,0,8">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding FieldOfView, StringFormat={}{0:0}°}" Width="36" TextAlignment="Right" VerticalAlignment="Center" />
+                            <TextBlock DockPanel.Dock="Left" Text="Field of view" Width="90" VerticalAlignment="Center" />
+                            <Slider Minimum="5" Maximum="120" Value="{Binding FieldOfView}" VerticalAlignment="Center" SmallChange="1" LargeChange="5" />
+                        </DockPanel>
+
+                        <TextBlock Text="Rotate around the target" Style="{StaticResource Muted}" Margin="0,0,0,2" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                            <TextBox Text="{Binding RotateDegrees, UpdateSourceTrigger=PropertyChanged, Delay=300}" Width="52" />
+                            <TextBlock Text="° around" VerticalAlignment="Center" Margin="4,0,4,0" />
+                            <ComboBox ItemsSource="{Binding AxisNames}" SelectedItem="{Binding RotateAxis}" Width="70" />
+                            <Button Content="−" Command="{Binding RotateCommand}" CommandParameter="-" Margin="6,0,2,0" MinWidth="32" />
+                            <Button Content="+" Command="{Binding RotateCommand}" CommandParameter="+" MinWidth="32" />
+                        </StackPanel>
+
+                        <TextBlock Text="Move" Style="{StaticResource Muted}" Margin="0,0,0,2" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBox Text="{Binding MoveUnits, UpdateSourceTrigger=PropertyChanged, Delay=300}" Width="52" />
+                            <TextBlock Text="units on" VerticalAlignment="Center" Margin="4,0,4,0" />
+                            <ComboBox ItemsSource="{Binding AxisNames}" SelectedItem="{Binding MoveAxis}" Width="70" />
+                            <Button Content="−" Command="{Binding MoveCommand}" CommandParameter="-" Margin="6,0,2,0" MinWidth="32" />
+                            <Button Content="+" Command="{Binding MoveCommand}" CommandParameter="+" MinWidth="32" />
+                        </StackPanel>
+
+                        <TextBlock Text="Stored views" Style="{StaticResource SectionHeader}" Margin="0,0,0,4" />
+                        <DockPanel Margin="0,0,0,6">
+                            <Button DockPanel.Dock="Right" Content="Store" Command="{Binding SaveViewCommand}" Margin="6,0,0,0"
+                                    ToolTip="Stores camera, field of view and playback time under this name (for this mesh, in the editor settings)" />
+                            <TextBox Text="{Binding NewViewName, UpdateSourceTrigger=PropertyChanged}" ToolTip="Name of the view" />
+                        </DockPanel>
+                        <TextBlock Text="None stored yet." Style="{StaticResource Muted}" FontSize="12"
+                                   Visibility="{Binding HasNoSavedViews, Converter={StaticResource BoolToVisibility}}" />
+                        <ItemsControl ItemsSource="{Binding SavedViews}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <DockPanel Margin="0,1">
+                                        <Button DockPanel.Dock="Right" Content="&#xE74D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" FontSize="11"
+                                                Padding="6,3" MinWidth="0" ToolTip="Delete"
+                                                Command="{Binding DataContext.DeleteViewCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                        <Button HorizontalContentAlignment="Left" Margin="0,0,4,0" ToolTip="Restore"
+                                                Command="{Binding DataContext.RestoreViewCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}">
+                                            <TextBlock>
+                                                <Run Text="{Binding Name, Mode=OneWay}" />
+                                                <Run Text="{Binding Time, Mode=OneWay, StringFormat={}  {0:0.0} s}" Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                                            </TextBlock>
+                                        </Button>
+                                    </DockPanel>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
         <viewer:MeshViewport Grid.Column="2" Mesh="{Binding Mesh}" Textures="{Binding Textures}" Attachments="{Binding Attachments}"
                              Visibility="{Binding UseSimpleView, Converter={StaticResource BoolToVisibility}}"
                              ShowPoints="{Binding ShowPoints}" ShowWireframe="{Binding ShowWireframe}" />

@@ -57,18 +57,58 @@ public sealed record GameScene(MeshData Primary, IReadOnlyList<GameSceneItem> It
     public bool IsAnimated => Particles is { Count: > 0 } || Items.Any(i => i.PlacementAt != null);
 }
 
-/// <summary>Where the camera looks from: an orbit around <see cref="Target"/> in game space (left-handed, ships face +Z).</summary>
-public record struct OrbitCamera(Vector3 Target, float Yaw, float Pitch, float Distance)
+/// <summary>
+/// Where the camera looks from: an orbit around <see cref="Target"/> in game space (left-handed, ships face +Z), with a
+/// vertical field of view in degrees. Up is always +Y, so the pitch stops just short of straight up or down.
+/// </summary>
+public record struct OrbitCamera(Vector3 Target, float Yaw, float Pitch, float Distance, float FieldOfView = 45f)
 {
+    public const float MaxPitch = 1.5699f;
+    public const float MinFieldOfView = 5f, MaxFieldOfView = 120f;
+
     public readonly Vector3 Direction => new(MathF.Cos(Pitch) * MathF.Sin(Yaw), MathF.Sin(Pitch), MathF.Cos(Pitch) * MathF.Cos(Yaw));
     public readonly Vector3 Eye => Target + Direction * Distance;
+    public readonly float FieldOfViewRadians => Math.Clamp(FieldOfView, MinFieldOfView, MaxFieldOfView) * MathF.PI / 180;
 
     /// <summary>In front of the ship, above and to its left, far enough to see all of it: the bow points to the bottom left.</summary>
-    public static OrbitCamera Frame(MeshData mesh)
+    public static OrbitCamera Frame(MeshData mesh, float fieldOfView = 45f) =>
+        Looking(mesh, new Vector3(-0.9f, 0.6f, 1.3f), fieldOfView);
+
+    /// <summary>From straight above, the bow pointing up.</summary>
+    public static OrbitCamera TopDown(MeshData mesh, float fieldOfView = 45f) => Looking(mesh, new Vector3(0, 1, -0.0001f), fieldOfView);
+
+    /// <summary>Looking at the bow.</summary>
+    public static OrbitCamera Front(MeshData mesh, float fieldOfView = 45f) => Looking(mesh, Vector3.UnitZ, fieldOfView);
+
+    /// <summary>Looking at the ship's left side (from -X; ships face +Z with +X to their right).</summary>
+    public static OrbitCamera Side(MeshData mesh, float fieldOfView = 45f) => Looking(mesh, -Vector3.UnitX, fieldOfView);
+
+    public static OrbitCamera Back(MeshData mesh, float fieldOfView = 45f) => Looking(mesh, -Vector3.UnitZ, fieldOfView);
+
+    /// <summary>At the mesh's centre from <paramref name="direction"/>, far enough to see all of it.</summary>
+    public static OrbitCamera Looking(MeshData mesh, Vector3 direction, float fieldOfView = 45f)
     {
         var center = (mesh.MinExtents + mesh.MaxExtents) / 2;
         float radius = mesh.BoundingRadius > 0 ? mesh.BoundingRadius : Vector3.Distance(mesh.MinExtents, mesh.MaxExtents) / 2;
-        var dir = Vector3.Normalize(new Vector3(-0.9f, 0.6f, 1.3f));
-        return new OrbitCamera(center, MathF.Atan2(dir.X, dir.Z), MathF.Asin(dir.Y), Math.Max(1f, radius / MathF.Tan(45f * MathF.PI / 360f) * 1.15f));
+        var camera = new OrbitCamera(center, 0, 0, 1, fieldOfView).Toward(direction);
+        return camera with { Distance = Math.Max(1f, radius / MathF.Tan(camera.FieldOfViewRadians / 2) * 1.15f) };
     }
+
+    /// <summary>The same orbit seen from <paramref name="direction"/> (from the target towards the eye).</summary>
+    public readonly OrbitCamera Toward(Vector3 direction)
+    {
+        if (direction.LengthSquared() < 1e-12f) return this;
+        direction = Vector3.Normalize(direction);
+        float pitch = Math.Clamp(MathF.Asin(Math.Clamp(direction.Y, -1, 1)), -MaxPitch, MaxPitch);
+        // Straight up or down has no yaw of its own: keep the current one.
+        float yaw = MathF.Abs(direction.X) + MathF.Abs(direction.Z) < 1e-6f ? Yaw : MathF.Atan2(direction.X, direction.Z);
+        return this with { Yaw = yaw, Pitch = pitch };
+    }
+
+    /// <summary>The eye turned by <paramref name="degrees"/> around a world axis through the target.</summary>
+    public readonly OrbitCamera Rotated(Vector3 axis, float degrees) =>
+        Toward(Vector3.Transform(Direction, Quaternion.CreateFromAxisAngle(Vector3.Normalize(axis), degrees * MathF.PI / 180)));
+
+    /// <summary>Camera and target moved together by <paramref name="offset"/> game units.</summary>
+    public readonly OrbitCamera Moved(Vector3 offset) => this with { Target = Target + offset };
 }

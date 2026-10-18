@@ -22,7 +22,8 @@ public sealed class ViewportCapture
 
 /// <summary>
 /// Shows a <see cref="GameScene"/> drawn by <see cref="GameRenderer"/> with the game's shaders. Drag to rotate (left or right
-/// button), wheel to zoom, middle button or Shift+drag to pan, double-click to frame the mesh again.
+/// button), wheel to zoom, middle button or Shift+drag to pan, double-click to frame the mesh again. The camera is a
+/// two-way property, so the page keeps it while the view is rebuilt (switching tabs).
 /// </summary>
 public sealed class GameMeshView : Grid
 {
@@ -55,6 +56,13 @@ public sealed class GameMeshView : Grid
             if (e.OldValue is ViewportCapture old) old.Handler = null;
             if (e.NewValue is ViewportCapture capture) capture.Handler = ((GameMeshView)d).CaptureImage;
         }));
+
+    /// <summary>
+    /// The camera, two-way: the page keeps it (so a tab shows the same view when it's shown again) and can set it (reset,
+    /// top-down, stored views). Null frames the mesh.
+    /// </summary>
+    public static readonly DependencyProperty CameraProperty = DependencyProperty.Register(nameof(Camera), typeof(OrbitCamera?), typeof(GameMeshView),
+        new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, e) => ((GameMeshView)d).OnCameraChanged((OrbitCamera?)e.NewValue)));
 
     public static readonly DependencyProperty ShowWireframeProperty = DependencyProperty.Register(nameof(ShowWireframe), typeof(bool), typeof(GameMeshView),
         new PropertyMetadata(false, (d, _) => ((GameMeshView)d).Invalidate()));
@@ -123,6 +131,32 @@ public sealed class GameMeshView : Grid
     {
         get => (double)GetValue(ParticleDurationProperty);
         set => SetValue(ParticleDurationProperty, value);
+    }
+
+    public OrbitCamera? Camera
+    {
+        get => (OrbitCamera?)GetValue(CameraProperty);
+        set => SetValue(CameraProperty, value);
+    }
+
+    private bool _settingCamera;
+
+    private void OnCameraChanged(OrbitCamera? camera)
+    {
+        if (_settingCamera) return;
+        if (camera is { } c) _camera = c;
+        else if (Scene is { } scene) SetCamera(OrbitCamera.Frame(scene.Primary, _camera.FieldOfView > 0 ? _camera.FieldOfView : 45f));
+        Invalidate();
+    }
+
+    /// <summary>Moves the camera and tells the page.</summary>
+    private void SetCamera(OrbitCamera camera)
+    {
+        _camera = camera;
+        _settingCamera = true;
+        SetCurrentValue(CameraProperty, camera);
+        _settingCamera = false;
+        Invalidate();
     }
 
     public ViewportCapture? Capture
@@ -225,8 +259,10 @@ public sealed class GameMeshView : Grid
         {
             _renderer ??= new GameRenderer();
             _renderer.SetScene(scene);
-            // Keep the camera when only options (team colour, skybox) change for the same mesh.
-            if (old?.Primary != scene.Primary) _camera = OrbitCamera.Frame(scene.Primary);
+            // Keep the camera when only options (team colour, skybox) change for the same mesh, or when the page has one
+            // (the tab was shown before).
+            if (Camera is { } kept) _camera = kept;
+            else if (old?.Primary != scene.Primary) SetCamera(OrbitCamera.Frame(scene.Primary));
             foreach (var effect in scene.Particles ?? []) effect.System.RunTo((float)ParticleTime);
             ShowError(_renderer.Error);
         }
@@ -303,8 +339,7 @@ public sealed class GameMeshView : Grid
         Focus();
         if (e.ClickCount == 2 && Scene is { } scene)
         {
-            _camera = OrbitCamera.Frame(scene.Primary);
-            Invalidate();
+            SetCamera(OrbitCamera.Frame(scene.Primary, _camera.FieldOfView));
             return;
         }
         _lastMouse = e.GetPosition(this);
@@ -332,21 +367,19 @@ public sealed class GameMeshView : Grid
             var forward = -_camera.Direction;
             var right = Vector3.Normalize(Vector3.Cross(Vector3.UnitY, forward));
             var up = Vector3.Cross(forward, right);
-            float perPixel = 2 * _camera.Distance * MathF.Tan(45f * MathF.PI / 360f) / (float)Math.Max(1, ActualHeight);
-            _camera = _camera with { Target = _camera.Target + (-right * (float)delta.X + up * (float)delta.Y) * perPixel };
+            float perPixel = 2 * _camera.Distance * MathF.Tan(_camera.FieldOfViewRadians / 2) / (float)Math.Max(1, ActualHeight);
+            SetCamera(_camera with { Target = _camera.Target + (-right * (float)delta.X + up * (float)delta.Y) * perPixel });
         }
         else if (e.LeftButton == MouseButtonState.Pressed || e.RightButton == MouseButtonState.Pressed)
         {
-            float pitch = Math.Clamp(_camera.Pitch + (float)delta.Y * 0.01f, -1.5f, 1.5f);
-            _camera = _camera with { Yaw = _camera.Yaw + (float)delta.X * 0.01f, Pitch = pitch };
+            float pitch = Math.Clamp(_camera.Pitch + (float)delta.Y * 0.01f, -OrbitCamera.MaxPitch, OrbitCamera.MaxPitch);
+            SetCamera(_camera with { Yaw = _camera.Yaw + (float)delta.X * 0.01f, Pitch = pitch });
         }
-        Invalidate();
     }
 
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {
         base.OnMouseWheel(e);
-        _camera = _camera with { Distance = Math.Max(0.5f, _camera.Distance * MathF.Pow(0.9f, e.Delta / 120f)) };
-        Invalidate();
+        SetCamera(_camera with { Distance = Math.Max(0.5f, _camera.Distance * MathF.Pow(0.9f, e.Delta / 120f)) });
     }
 }

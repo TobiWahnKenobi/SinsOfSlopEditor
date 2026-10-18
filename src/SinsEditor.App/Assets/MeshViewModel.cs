@@ -197,6 +197,141 @@ public sealed partial class MeshViewModel : PageViewModel
     [RelayCommand]
     private void Restart() => ParticleTime = 0;
 
+    // ---- Camera: kept here so the tab shows the same view when it's shown again; the view palette moves it ----
+
+    /// <summary>The game-shader view's camera (two-way with the view); null until the view frames the mesh.</summary>
+    [ObservableProperty]
+    private SinsEditor.Viewer.OrbitCamera? _camera;
+
+    [ObservableProperty]
+    private bool _isPaletteOpen;
+
+    /// <summary>Vertical field of view in degrees.</summary>
+    [ObservableProperty]
+    private double _fieldOfView = 45;
+
+    [ObservableProperty]
+    private double _rotateDegrees = 15;
+
+    [ObservableProperty]
+    private double _moveUnits = 10;
+
+    [ObservableProperty]
+    private string _rotateAxis = "Y";
+
+    [ObservableProperty]
+    private string _moveAxis = "Z";
+
+    [ObservableProperty]
+    private string _newViewName = "";
+
+    public IReadOnlyList<string> AxisNames { get; } = ["X", "Y", "Z"];
+    public System.Collections.ObjectModel.ObservableCollection<SavedMeshView> SavedViews { get; } = [];
+    public bool HasNoSavedViews => SavedViews.Count == 0;
+
+    partial void OnFieldOfViewChanged(double value)
+    {
+        float fov = (float)Math.Clamp(value, SinsEditor.Viewer.OrbitCamera.MinFieldOfView, SinsEditor.Viewer.OrbitCamera.MaxFieldOfView);
+        if (Camera is { } c && c.FieldOfView != fov) Camera = c with { FieldOfView = fov };
+    }
+
+    partial void OnCameraChanged(SinsEditor.Viewer.OrbitCamera? value)
+    {
+        if (value is { } c && Math.Abs(c.FieldOfView - FieldOfView) > 0.01) FieldOfView = c.FieldOfView;
+    }
+
+    private static System.Numerics.Vector3 AxisVector(string axis) => axis switch
+    {
+        "X" => System.Numerics.Vector3.UnitX,
+        "Y" => System.Numerics.Vector3.UnitY,
+        _ => System.Numerics.Vector3.UnitZ,
+    };
+
+    private void SetView(Func<MeshData, float, SinsEditor.Viewer.OrbitCamera> view)
+    {
+        if (_loaded is { } loaded) Camera = view(loaded.Data, (float)FieldOfView);
+    }
+
+    [RelayCommand]
+    private void ResetView() => SetView((m, f) => SinsEditor.Viewer.OrbitCamera.Frame(m, f));
+
+    [RelayCommand]
+    private void TopDownView() => SetView((m, f) => SinsEditor.Viewer.OrbitCamera.TopDown(m, f));
+
+    [RelayCommand]
+    private void FrontView() => SetView((m, f) => SinsEditor.Viewer.OrbitCamera.Front(m, f));
+
+    [RelayCommand]
+    private void SideView() => SetView((m, f) => SinsEditor.Viewer.OrbitCamera.Side(m, f));
+
+    [RelayCommand]
+    private void BackView() => SetView((m, f) => SinsEditor.Viewer.OrbitCamera.Back(m, f));
+
+    /// <summary>Turns the camera around the chosen axis through its target; the parameter is the direction (+1 / -1).</summary>
+    [RelayCommand]
+    private void Rotate(string? sign)
+    {
+        if (Camera is { } c) Camera = c.Rotated(AxisVector(RotateAxis), (float)RotateDegrees * (sign == "-" ? -1 : 1));
+    }
+
+    /// <summary>Moves the camera and its target along the chosen axis; the parameter is the direction (+1 / -1).</summary>
+    [RelayCommand]
+    private void Move(string? sign)
+    {
+        if (Camera is { } c) Camera = c.Moved(AxisVector(MoveAxis) * (float)MoveUnits * (sign == "-" ? -1 : 1));
+    }
+
+    private void LoadSavedViews()
+    {
+        SavedViews.Clear();
+        if (EditorSettings.Load().MeshViews.TryGetValue(Name, out var views))
+            foreach (var view in views) SavedViews.Add(view);
+    }
+
+    private void StoreSavedViews()
+    {
+        var settings = EditorSettings.Load();
+        if (SavedViews.Count == 0) settings.MeshViews.Remove(Name);
+        else settings.MeshViews[Name] = [.. SavedViews];
+        settings.Save();
+    }
+
+    /// <summary>Stores the camera, field of view and playback time under the entered name (replacing one of that name).</summary>
+    [RelayCommand]
+    private void SaveView()
+    {
+        if (Camera is not { } c) return;
+        string name = NewViewName.Trim();
+        if (name.Length == 0) name = $"View {SavedViews.Count + 1}";
+        var view = new SavedMeshView
+        {
+            Name = name, Target = [c.Target.X, c.Target.Y, c.Target.Z], Yaw = c.Yaw, Pitch = c.Pitch, Distance = c.Distance,
+            FieldOfView = c.FieldOfView, Time = ParticleTime,
+        };
+        int existing = SavedViews.ToList().FindIndex(v => v.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (existing >= 0) SavedViews[existing] = view;
+        else SavedViews.Add(view);
+        NewViewName = "";
+        StoreSavedViews();
+    }
+
+    [RelayCommand]
+    private void RestoreView(SavedMeshView? view)
+    {
+        if (view is null) return;
+        IsPlaying = false;
+        var target = view.Target is { Length: 3 } t ? new System.Numerics.Vector3(t[0], t[1], t[2]) : System.Numerics.Vector3.Zero;
+        Camera = new SinsEditor.Viewer.OrbitCamera(target, view.Yaw, view.Pitch, view.Distance, view.FieldOfView);
+        ParticleTime = Math.Clamp(view.Time, 0, ParticleDuration);
+    }
+
+    [RelayCommand]
+    private void DeleteView(SavedMeshView? view)
+    {
+        if (view is null || !SavedViews.Remove(view)) return;
+        StoreSavedViews();
+    }
+
     // ---- Background: skybox, a fixed 2D picture (file or brush), or none ----
 
     public static IReadOnlyList<BackgroundChoice> BackgroundChoices { get; } =
@@ -552,6 +687,8 @@ public sealed partial class MeshViewModel : PageViewModel
         Shaders = GameShaders.All(workspace);
         BrushNames = workspace.Index.Brushes.Entries.Keys.Order(StringComparer.OrdinalIgnoreCase).ToList();
         Skyboxes = GameShaders.Skyboxes(workspace);
+        SavedViews.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoSavedViews));
+        LoadSavedViews();
         _skybox = Skyboxes.FirstOrDefault(s => s.Equals("skybox02", StringComparison.OrdinalIgnoreCase)) ?? Skyboxes.FirstOrDefault();
         _shader = GameShaders.ForMesh(workspace, Name);
         UsedBy = workspace.Index.IncomingReferences(ReferenceKind.Mesh, Name)

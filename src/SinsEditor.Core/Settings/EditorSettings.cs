@@ -11,6 +11,18 @@ public sealed class ModSettings
     public string? Language { get; set; }
 }
 
+/// <summary>A named camera position of the mesh view (orbit around a target, field of view) and playback time.</summary>
+public sealed class SavedMeshView
+{
+    public string Name { get; set; } = "";
+    public float[] Target { get; set; } = [0, 0, 0];
+    public float Yaw { get; set; }
+    public float Pitch { get; set; }
+    public float Distance { get; set; }
+    public float FieldOfView { get; set; } = 45;
+    public double Time { get; set; }
+}
+
 /// <summary>Editor-wide settings in <c>%AppData%\SinsEditor\settings.json</c>.</summary>
 public sealed class EditorSettings
 {
@@ -29,6 +41,8 @@ public sealed class EditorSettings
     /// in meters; the factor follows from this and the mesh's current size.
     /// </summary>
     public double MeshUnitsPerMeter { get; set; } = 1;
+    /// <summary>Stored mesh view positions, keyed by mesh name (case-insensitive); the editor's, not the mod's.</summary>
+    public Dictionary<string, List<SavedMeshView>> MeshViews { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>Most recent first.</summary>
     public List<string> RecentMods { get; set; } = [];
     /// <summary>Keyed by full mod path, case-insensitive.</summary>
@@ -58,6 +72,7 @@ public sealed class EditorSettings
                 if (settings != null)
                 {
                     settings.Mods = new Dictionary<string, ModSettings>(settings.Mods, StringComparer.OrdinalIgnoreCase);
+                    settings.MeshViews = new Dictionary<string, List<SavedMeshView>>(settings.MeshViews ?? [], StringComparer.OrdinalIgnoreCase);
                     return settings;
                 }
             }

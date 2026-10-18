@@ -621,7 +621,7 @@ public sealed class GameRenderer : IDisposable
         // camera wastes the depth buffer's precision and makes a planet's surface and cloud shell fight.
         float distanceToCenter = Vector3.Distance(eye, center);
         float near = Math.Max(distanceToCenter * 0.002f, distanceToCenter - radius * 2f), far = distanceToCenter + radius * 2f;
-        var projection = PerspectiveLH(45f * MathF.PI / 180, (float)width / height, near, far);
+        var projection = PerspectiveLH(camera.FieldOfViewRadians, (float)width / height, near, far);
         var cameraOffset = Matrix4x4.CreateTranslation(-eye);
 
         _context.OutputMerger.SetTargets(_depthView, _colorView);
