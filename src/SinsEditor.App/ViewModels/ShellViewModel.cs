@@ -55,6 +55,32 @@ public sealed partial class ShellViewModel : ObservableObject
         Search = new SearchViewModel(this);
         WeakReferenceMessenger.Default.Register<ShellViewModel, EntityOperationRequest>(this,
             static (shell, request) => _ = shell.RunEntityOperationAsync(request));
+        WeakReferenceMessenger.Default.Register<ShellViewModel, Research.NewResearchSubjectRequest>(this,
+            static (shell, request) => _ = shell.CreateResearchSubjectAsync(request));
+    }
+
+    /// <summary>
+    /// A new research subject in a free cell of the tree: open edits are saved or discarded first (the plan works on saved
+    /// files), then the copy, manifest and race list are written, the mod reloads and the tree shows the new subject.
+    /// </summary>
+    public async Task CreateResearchSubjectAsync(Research.NewResearchSubjectRequest request)
+    {
+        if (Workspace is null || !await ResolveUnsavedChangesAsync("you create a research subject")) return;
+        if (_options is null || !Workspace.Index.Entities.TryGetValue(request.RaceName, out var race)
+            || !Workspace.Index.Entities.TryGetValue(request.Template, out var template)) return;
+        try
+        {
+            var plan = Core.Research.ResearchCreation.PlanNewSubject(Workspace, race, template, request.NewName,
+                request.Field, request.Block, request.Column, request.Row);
+            await Services.Busy.Current.RunInBackground($"Creating {request.NewName}…", _ => { plan.Apply(Workspace); return true; });
+        }
+        catch (Exception e) when (e is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            MessageBox.Show($"Couldn't create the research subject: {e.Message}", "New research subject", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+        Research.ResearchViewModel.PendingSelection = (race.Name, request.NewName);
+        await OpenAsync(_options);
     }
 
     /// <summary>

@@ -221,4 +221,34 @@ public sealed class ResearchEditorTests : IAsyncLifetime
         vm.DeleteSelectedArrow();
         Assert.DoesNotContain(vm.Tree.Subject(to.Name)!.Prerequisites, p => p.Subject == from.Name);
     }
+
+    [SkippableFact]
+    public async Task A_new_subject_can_be_created_in_a_free_cell()
+    {
+        var vm = Editor();
+        var (block, column, row) = FreeCell(vm);
+        vm.SelectCell(block, column, row);
+        Assert.True(vm.HasCellSelection);
+        Assert.NotNull(vm.NewSubjectTemplate);
+        string name = vm.NewSubjectName;
+        Assert.Null(Core.Editing.EntityOperations.ValidateNewName(_workspace!, name));
+        var template = _workspace!.Index.Entities[vm.NewSubjectTemplate!.Name];
+
+        var plan = ResearchCreation.PlanNewSubject(_workspace, _workspace.Index.Entities[Race], template, name, block.Field, block.Index, column, row);
+        plan.Apply(_workspace);
+        var after = await ModWorkspace.OpenAsync(new WorkspaceOptions(TestPaths.GameDir!, _mod, [], "English"),
+            cacheRoot: Path.Combine(Path.GetTempPath(), "SinsEditorTests", "cache"));
+
+        Assert.True(after.Index.Entities[name].InManifest);
+        var tree = ResearchTree.Build(after, after.Index.Entities[Race]);
+        var subject = Assert.Single(tree.Subjects, s => s.Name == name);
+        Assert.Equal((block.Field, block.Index, column, row, column), (subject.Field, subject.Block, subject.Column, subject.Row, subject.Tier));
+        Assert.Empty(subject.Prerequisites);
+        Assert.NotNull(tree.CellOf(subject));
+        // Its strings are its own copies, with the template's text.
+        var names = after.Index.OutgoingReferences(after.Index.Entities[name]).Where(r => r.Kind == Core.Index.ReferenceKind.String).ToList();
+        Assert.NotEmpty(names);
+        Assert.All(names, r => Assert.True(r.Resolved));
+        Assert.DoesNotContain(names, r => after.Index.OutgoingReferences(template).Any(t => t.Target == r.Target));
+    }
 }

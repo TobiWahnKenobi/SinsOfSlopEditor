@@ -116,12 +116,14 @@ public partial class ResearchView : UserControl
         e.Handled = true;
     }
 
-    /// <summary>A click on empty space clears the selection.</summary>
+    /// <summary>A click on a free cell selects it (to create a subject there); elsewhere it clears the selection.</summary>
     private void Board_MouseDown(object sender, MouseButtonEventArgs e)
     {
         if (VM is null || e.Handled) return;
         VM.SelectedSubject = null;
         VM.SelectedArrow = null;
+        VM.SelectedCell = null;
+        if (VM.CellAt(e.GetPosition(Board)) is { } cell) VM.SelectCell(cell.Block, cell.Column, cell.Row);
         Focus();
     }
 

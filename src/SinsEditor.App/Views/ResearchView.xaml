@@ -207,6 +207,13 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
+                    <!-- The free cell chosen for a new subject -->
+                    <Canvas IsHitTestVisible="False" Visibility="{Binding HasCellSelection, Converter={StaticResource BoolToVisibility}}">
+                        <Rectangle Canvas.Left="{Binding SelectedCell.Bounds.X}" Canvas.Top="{Binding SelectedCell.Bounds.Y}"
+                                   Width="{Binding SelectedCell.Bounds.Width}" Height="{Binding SelectedCell.Bounds.Height}"
+                                   Stroke="#FFFFC107" StrokeThickness="2" StrokeDashArray="3 2" RadiusX="3" RadiusY="3" Fill="#30FFC107" />
+                    </Canvas>
+
                     <!-- Drop target while dragging -->
                     <Canvas IsHitTestVisible="False">
                         <Rectangle x:Name="DropMarker" Stroke="#FF4FC3F7" StrokeThickness="2" RadiusX="3" RadiusY="3" Visibility="Collapsed" />
@@ -256,8 +263,22 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </StackPanel>
-                <TextBlock Text="Click an icon to see and edit its prerequisites." Style="{StaticResource Muted}" Margin="0,0,0,16" TextWrapping="Wrap"
-                           Visibility="{Binding HasSelection, Converter={StaticResource InverseBoolToVisibility}}" />
+                <StackPanel Visibility="{Binding HasCellSelection, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,16">
+                    <TextBlock Text="New subject here" Style="{StaticResource SectionHeader}" FontSize="18" Margin="0,0,0,2" />
+                    <TextBlock Text="{Binding CellTitle}" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                    <TextBlock Text="Copy of" FontWeight="SemiBold" Margin="0,0,0,2" />
+                    <ComboBox ItemsSource="{Binding AllSubjects}" SelectedItem="{Binding NewSubjectTemplate}" IsTextSearchEnabled="True" Margin="0,0,0,8"
+                              ToolTip="The new subject starts as a copy of this one (its strings copied under new IDs), without prerequisites" />
+                    <TextBlock Text="Entity name" FontWeight="SemiBold" Margin="0,0,0,2" />
+                    <TextBox Text="{Binding NewSubjectName, UpdateSourceTrigger=PropertyChanged}" Margin="0,0,0,4" />
+                    <TextBlock Text="{Binding NewSubjectError}" Foreground="{StaticResource ErrorBrush}" TextWrapping="Wrap" Margin="0,0,0,4"
+                               Visibility="{Binding NewSubjectError, Converter={StaticResource NullToCollapsed}}" />
+                    <TextBlock Style="{StaticResource Muted}" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,8"
+                               Text="Creates the entity in the mod, lists it in entity.manifest and adds it to this race's research list at this cell, tier = column. Open edits are saved or discarded first; the mod reloads afterwards." />
+                    <Button Content="Create subject" Command="{Binding CreateSubjectCommand}" HorizontalAlignment="Left" MinWidth="120" />
+                </StackPanel>
+                <TextBlock Text="Click an icon to see and edit its prerequisites, or a free cell to create a subject there." Style="{StaticResource Muted}" Margin="0,0,0,16" TextWrapping="Wrap"
+                           Visibility="{Binding HasNoSelection, Converter={StaticResource BoolToVisibility}}" />
 
                 <TextBlock Text="Not on the tree" FontWeight="SemiBold" Margin="0,0,0,2" />
                 <TextBlock Text="Drag onto a free cell to place. Drag an icon from the tree here to take it off this race's research list."

@@ -4,6 +4,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CommunityToolkit.Mvvm.Messaging;
 using SinsEditor.App.Imaging;
 using SinsEditor.App.Navigation;
 using SinsEditor.App.ViewModels;
@@ -74,6 +75,12 @@ public sealed record SubjectChoice(string Name, string Display)
 
 public sealed record IssueRow(ProblemSeverity Severity, string Message, string? Subject);
 
+/// <summary>Asks the shell to create a research subject in a free cell (saving or discarding open edits first, reloading after).</summary>
+public sealed record NewResearchSubjectRequest(string RaceName, string Template, string NewName, string Field, int Block, int Column, int Row);
+
+/// <summary>A free cell chosen on the tree, where a new subject can be created.</summary>
+public sealed record SelectedCell(ResearchBlock Block, int Column, int Row, Rect Bounds);
+
 /// <summary>A research subject that isn't on the tree: on the race's list without a valid place, or not on its list at all.</summary>
 public sealed record UnassignedRow(string Name, string Display, string Detail, bool IsOnRaceList);
 
@@ -106,6 +113,23 @@ public sealed partial class ResearchViewModel : PageViewModel
 
     [ObservableProperty]
     private ArrowVisual? _selectedArrow;
+
+    /// <summary>A free cell clicked on the tree: the inspector offers to create a subject there.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasCellSelection), nameof(CellTitle), nameof(HasNoSelection))]
+    private SelectedCell? _selectedCell;
+
+    [ObservableProperty]
+    private string _newSubjectName = "";
+
+    [ObservableProperty]
+    private SubjectChoice? _newSubjectTemplate;
+
+    [ObservableProperty]
+    private string? _newSubjectError;
+
+    /// <summary>The subject to select once the page is built again (after creating one, the mod reloads).</summary>
+    public static (string Race, string Subject)? PendingSelection { get; set; }
 
     [ObservableProperty]
     private bool _showGrid = true;
@@ -140,6 +164,11 @@ public sealed partial class ResearchViewModel : PageViewModel
         SelectedField = ResearchTree.Fields.FirstOrDefault(f => Tree.Subjects.Any(s => s.Field == f)) ?? "Combat";
         Watch();
         Refresh();
+        if (PendingSelection is { } pending && pending.Race.Equals(race.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            PendingSelection = null;
+            SelectByName(pending.Subject);
+        }
     }
 
     public EntityRecord Race { get; }
@@ -162,6 +191,9 @@ public sealed partial class ResearchViewModel : PageViewModel
     public BitmapSource? ContentBackdrop { get; private set; }
 
     public bool HasSelection => SelectedSubject != null;
+    public bool HasCellSelection => SelectedCell != null;
+    public bool HasNoSelection => !HasSelection && !HasCellSelection;
+    public string CellTitle => SelectedCell is { } c ? $"{ResearchTree.FieldTitle(c.Block.Field)} · block {c.Block.Index} · column {c.Column} · row {c.Row}" : "";
     public string SelectedTitle => SelectedSubject?.DisplayName ?? "";
     public string SelectedDetails => SelectedSubject?.Subject is { } s
         ? $"{s.Name}\n{ResearchTree.FieldTitle(s.Field ?? "?")} · block {s.Block} · column {s.Column} · row {s.Row} · tier {s.Tier} · {s.MaxLevels} level{(s.MaxLevels == 1 ? "" : "s")}"
@@ -201,7 +233,11 @@ public sealed partial class ResearchViewModel : PageViewModel
         OnPropertyChanged(nameof(IsDirty));
     }
 
-    partial void OnSelectedFieldChanged(string value) => Refresh();
+    partial void OnSelectedFieldChanged(string value)
+    {
+        SelectedCell = null;
+        Refresh();
+    }
     partial void OnShowGridChanged(bool value) => Refresh();
 
     partial void OnSelectedSubjectChanged(SubjectVisual? oldValue, SubjectVisual? newValue)
@@ -211,8 +247,52 @@ public sealed partial class ResearchViewModel : PageViewModel
         {
             newValue.IsSelected = true;
             SelectedArrow = null;
+            SelectedCell = null;
         }
         RefreshSelection();
+    }
+
+    /// <summary>Selects a free cell of the selected field, suggesting a template (the nearest subject) and a name.</summary>
+    public void SelectCell(ResearchBlock block, int column, int row)
+    {
+        if (!Tree.Layouts.TryGetValue(block.Field, out var layout)) return;
+        if (Tree.Subjects.Any(s => s.Field == block.Field && s.Block == block.Index && s.Column == column && s.Row == row && Tree.CellOf(s) != null)) return;
+        SelectedSubject = null;
+        SelectedArrow = null;
+        var origin = block.CellOrigin(layout, column, row);
+        SelectedCell = new SelectedCell(block, column, row, new Rect(origin.X, origin.Y, layout.ButtonSize.X, layout.ButtonSize.Y));
+        var template = ResearchCreation.SuggestTemplate(Tree, block.Field, block.Index, column, row);
+        NewSubjectTemplate = template is null ? null : AllSubjects.FirstOrDefault(c => c.Name == template.Name);
+        NewSubjectName = ResearchCreation.SuggestName(_workspace, NewSubjectTemplate?.Name ?? "ResearchSubject");
+        NewSubjectError = null;
+    }
+
+    partial void OnNewSubjectTemplateChanged(SubjectChoice? value)
+    {
+        if (value != null && (NewSubjectName.Length == 0 || NewSubjectName.EndsWith("_New", StringComparison.Ordinal)
+            || System.Text.RegularExpressions.Regex.IsMatch(NewSubjectName, @"_New\d+$")))
+            NewSubjectName = ResearchCreation.SuggestName(_workspace, value.Name);
+    }
+
+    partial void OnNewSubjectNameChanged(string value) => NewSubjectError = null;
+
+    [RelayCommand]
+    private void CreateSubject()
+    {
+        if (SelectedCell is not { } cell) return;
+        if (NewSubjectTemplate is not { } template)
+        {
+            NewSubjectError = "Choose a subject to copy.";
+            return;
+        }
+        string name = NewSubjectName.Trim();
+        if (EntityOperations.ValidateNewName(_workspace, name) is { } error)
+        {
+            NewSubjectError = error;
+            return;
+        }
+        WeakReferenceMessenger.Default.Send(
+            new NewResearchSubjectRequest(Race.Name, template.Name, name, cell.Block.Field, cell.Block.Index, cell.Column, cell.Row));
     }
 
     partial void OnSelectedArrowChanged(ArrowVisual? oldValue, ArrowVisual? newValue)
@@ -339,6 +419,7 @@ public sealed partial class ResearchViewModel : PageViewModel
     private void RefreshSelection()
     {
         OnPropertyChanged(nameof(HasSelection));
+        OnPropertyChanged(nameof(HasNoSelection));
         OnPropertyChanged(nameof(SelectedTitle));
         OnPropertyChanged(nameof(SelectedDetails));
         SelectedPrerequisites.Clear();
