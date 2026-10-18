@@ -104,6 +104,11 @@ public sealed partial class PropertyRowViewModel : ObservableObject
     public bool IsStringReference => Kind == RowKind.Reference && Hint?.Reference == ReferenceKind.String;
     public bool HasString => IsStringReference && Value.Length > 0 && _owner.Exists(ReferenceKind.String, Value);
     public bool ShowStringText => HasString || IsCreatingString;
+
+    /// <summary>How many places use this string (entities, as last saved); shown when it's more than one, since editing changes all.</summary>
+    public int StringUseCount => IsStringReference && Value.Length > 0 ? _owner.StringUseCount(Value) : 0;
+    public bool IsSharedString => StringUseCount > 1;
+    public string StringUseText => $"used {StringUseCount}×";
     public bool CanCreateString => IsStringReference && Value.Trim().Length > 0 && !Value.Contains('"') && !HasString && !IsCreatingString;
 
     /// <summary>The referenced string's text; setting it writes the mod's string file (adding the string if it's new).</summary>
@@ -178,6 +183,9 @@ public sealed partial class PropertyRowViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowStringText));
         OnPropertyChanged(nameof(CanCreateString));
         OnPropertyChanged(nameof(StringText));
+        OnPropertyChanged(nameof(StringUseCount));
+        OnPropertyChanged(nameof(IsSharedString));
+        OnPropertyChanged(nameof(StringUseText));
     }
 
     private void Commit()

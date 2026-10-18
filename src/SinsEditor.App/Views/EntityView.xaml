@@ -206,6 +206,10 @@
                                        Visibility="{Binding ValueDescription, Converter={StaticResource NullToCollapsed}}" />
                             <DockPanel Margin="0,3,0,0" Visibility="{Binding ShowStringText, Converter={StaticResource BoolToVisibility}}">
                                 <TextBlock DockPanel.Dock="Left" Text="Text" Style="{StaticResource Muted}" FontSize="12" Width="36" VerticalAlignment="Center" Margin="2,0,0,0" />
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding StringUseText}" FontSize="12" VerticalAlignment="Center" Margin="6,0,0,0"
+                                           Foreground="{DynamicResource SystemFillColorCautionBrush}"
+                                           ToolTip="Other entities use this string too: changing the text changes it for all of them"
+                                           Visibility="{Binding IsSharedString, Converter={StaticResource BoolToVisibility}}" />
                                 <TextBox Text="{Binding StringText, UpdateSourceTrigger=LostFocus}" Style="{StaticResource EditorBox}"
                                          ToolTip="The string's text. Written to the mod's string file when you leave the box (a new string is added to it)." />
                             </DockPanel>

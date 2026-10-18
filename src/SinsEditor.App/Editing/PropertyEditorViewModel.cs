@@ -146,6 +146,10 @@ public sealed partial class PropertyEditorViewModel : ObservableObject
 
     public string StringText(string id) => _workspace.Index.Strings.Get(id) ?? "";
 
+    /// <summary>Distinct places (entity and line) that refer to the string.</summary>
+    public int StringUseCount(string id) =>
+        _workspace.Index.IncomingReferences(ReferenceKind.String, id).Select(r => (r.Source.Name, r.LineIndex)).Distinct().Count();
+
     /// <summary>Writes a string's text to the mod's string file; null if that worked, otherwise why not.</summary>
     public string? SetString(string id, string text)
     {
