@@ -10,7 +10,8 @@ A mod editor for *Sins of a Solar Empire: Rebellion*.
 {: .fs-6 .fw-300 }
 
 [Download the latest release](https://github.com/TobiWahnKenobi/SinsOfSlopEditor/releases/latest){: .btn .btn-primary .mr-2 }
-[Source on GitHub](https://github.com/TobiWahnKenobi/SinsOfSlopEditor){: .btn }
+[Source on GitHub](https://github.com/TobiWahnKenobi/SinsOfSlopEditor){: .btn .mr-2 }
+[Join the Discord](https://discord.gg/y8aD2gzU78){: .btn }
 
 {: .ai }
 > **This editor is completely AI-built.** Every line of code, every test, the build scripts, this manual and all

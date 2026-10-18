@@ -12,7 +12,7 @@ A mod editor for **Sins of a Solar Empire: Rebellion** (Windows). It opens a mod
 and lets you browse, edit, check and preview everything in it – entities, strings, research trees, brushes, textures
 and meshes – while keeping the game's file formats exactly as they are.
 
-**[Read the manual](https://tobiwahnkenobi.github.io/SinsOfSlopEditor/)** · **[Download the latest release](https://github.com/TobiWahnKenobi/SinsOfSlopEditor/releases/latest)**
+**[Read the manual](https://tobiwahnkenobi.github.io/SinsOfSlopEditor/)** · **[Download the latest release](https://github.com/TobiWahnKenobi/SinsOfSlopEditor/releases/latest)** · **[Join the Discord](https://discord.gg/y8aD2gzU78)**
 
 ![The dashboard](docs/images/dashboard.png)
 
@@ -49,6 +49,11 @@ pwsh build/publish.ps1        # release zip in dist/
 
 Needs the .NET 9 SDK. Most tests need the game: copy `testpaths.local.json.example` to `testpaths.local.json` and set
 the game folder (and optionally a test mod); without it they're skipped.
+
+## Community
+
+Questions, ideas and bug reports: join the [Discord server](https://discord.gg/y8aD2gzU78) or open an
+[issue](https://github.com/TobiWahnKenobi/SinsOfSlopEditor/issues).
 
 ## Licence
 

@@ -42,4 +42,5 @@ content only to demonstrate what the editor does; if the rights holders want the
 
 ## Feedback
 
-Bugs and ideas: [GitHub issues](https://github.com/TobiWahnKenobi/SinsOfSlopEditor/issues).
+Questions, bugs and ideas: join the [Discord server](https://discord.gg/y8aD2gzU78) or open a
+[GitHub issue](https://github.com/TobiWahnKenobi/SinsOfSlopEditor/issues).
