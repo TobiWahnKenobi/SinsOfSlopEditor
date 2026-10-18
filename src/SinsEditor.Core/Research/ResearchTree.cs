@@ -109,6 +109,25 @@ public sealed class ResearchTree
     public IEnumerable<ResearchBlock> BlocksOf(string field) => Blocks.Where(b => b.Field == field);
     public ResearchSubject? Subject(string name) => Subjects.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// The rows of a block offered for placing subjects: its grid, but stopping where another block of the field starts
+    /// below it (mods sometimes give blocks overlapping areas; the game draws the next block over those rows). Rows that
+    /// already hold a subject are kept.
+    /// </summary>
+    public int UsableRows(ResearchBlock block, ResearchFieldLayout layout)
+    {
+        var (_, rows) = block.GridSize(layout);
+        int limit = Blocks
+            .Where(b => b != block && b.Field == block.Field && b.Area.Y > block.Area.Y && b.Area.Y < block.Area.Y + block.Area.Height
+                        && b.Area.X < block.Area.X + block.Area.Width && block.Area.X < b.Area.X + b.Area.Width)
+            .Select(b => b.Area.Y)
+            .DefaultIfEmpty(int.MaxValue).Min();
+        int fitting = rows;
+        while (fitting > 0 && block.CellOrigin(layout, 0, fitting - 1).Y + layout.ButtonSize.Y > limit) fitting--;
+        int used = Subjects.Where(s => s.Field == block.Field && s.Block == block.Index && s.Row is >= 0).Select(s => s.Row!.Value + 1).DefaultIfEmpty(0).Max();
+        return Math.Min(rows, Math.Max(fitting, used));
+    }
+
     /// <summary>Subjects that can't be shown: no position, a field or block the race doesn't have, or outside the block's grid.</summary>
     public IEnumerable<ResearchSubject> Unplaced => Subjects.Where(s => CellOf(s) is null);
 

@@ -332,7 +332,8 @@ public sealed partial class ResearchViewModel : PageViewModel
             Blocks.Add(new BlockVisual(block, new Rect(a.X, a.Y, a.Width, a.Height), backdrop, title, picture,
                 new Point(a.X + tree.PictureTopLeft.X, a.Y + tree.PictureTopLeft.Y)));
             if (layout is null || !ShowGrid) continue;
-            var (cols, rows) = block.GridSize(layout);
+            var (cols, _) = block.GridSize(layout);
+            int rows = tree.UsableRows(block, layout);
             for (int c = 0; c < cols; c++)
             for (int r = 0; r < rows; r++)
             {
@@ -524,7 +525,8 @@ public sealed partial class ResearchViewModel : PageViewModel
         if (!Tree.Layouts.TryGetValue(SelectedField, out var layout)) return null;
         foreach (var block in Tree.BlocksOf(SelectedField))
         {
-            var (cols, rows) = block.GridSize(layout);
+            var (cols, _) = block.GridSize(layout);
+            int rows = Tree.UsableRows(block, layout);
             int col = (int)Math.Floor((point.X - block.Area.X - layout.ButtonOffset.X) / layout.StrideX);
             int row = (int)Math.Floor((point.Y - block.Area.Y - layout.ButtonOffset.Y) / layout.StrideY);
             if (col >= 0 && row >= 0 && col < cols && row < rows) return (block, col, row);
