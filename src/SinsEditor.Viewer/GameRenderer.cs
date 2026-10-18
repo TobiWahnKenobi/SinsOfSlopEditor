@@ -691,7 +691,7 @@ public sealed class GameRenderer : IDisposable
                 M(world * view * projection).CopyTo(data, 16);
                 M(world * view).CopyTo(data, 32);
                 V(fill).CopyTo(data, 48);
-                V(new Vector4(lightDirection, Math.Clamp(style.Bands, 1, 8))).CopyTo(data, 52);
+                V(new Vector4(lightDirection, Math.Clamp(style.Bands, 1, 16))).CopyTo(data, 52);
                 V(new Vector4((float)Math.Clamp(style.Shadow, 0, 1), style.UseTexture ? 1 : 0, style.TeamColor ? 1 : 0, 0)).CopyTo(data, 56);
                 V(team).CopyTo(data, 60);
                 _context.UpdateSubresource(data, _celCb);

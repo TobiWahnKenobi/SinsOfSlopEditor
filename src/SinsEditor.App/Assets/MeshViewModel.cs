@@ -339,7 +339,7 @@ public sealed partial class MeshViewModel : PageViewModel
     public bool CelUseTexture { get => Cel.UseTexture; set => Cel = Cel with { UseTexture = value }; }
     public bool CelUseMono { get => !Cel.UseTexture; set => Cel = Cel with { UseTexture = !value }; }
     public bool CelTeamColor { get => Cel.TeamColor; set => Cel = Cel with { TeamColor = value }; }
-    public int CelBands { get => Cel.Bands; set => Cel = Cel with { Bands = Math.Clamp(value, 1, 8) }; }
+    public int CelBands { get => Cel.Bands; set => Cel = Cel with { Bands = Math.Clamp(value, 1, 16) }; }
     public double CelShadow { get => Cel.Shadow; set => Cel = Cel with { Shadow = Math.Clamp(value, 0, 1) }; }
     public bool CelOutline { get => Cel.Outline; set => Cel = Cel with { Outline = value }; }
     public bool CelInnerLines { get => Cel.InnerLines; set => Cel = Cel with { InnerLines = value }; }

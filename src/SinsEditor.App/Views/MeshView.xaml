@@ -87,7 +87,7 @@
                         <DockPanel Margin="0,4,0,2">
                             <TextBlock DockPanel.Dock="Right" Text="{Binding CelBands}" Width="28" TextAlignment="Right" VerticalAlignment="Center" />
                             <TextBlock DockPanel.Dock="Left" Text="Light bands" Width="90" VerticalAlignment="Center" />
-                            <Slider Minimum="1" Maximum="8" Value="{Binding CelBands}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"
+                            <Slider Minimum="1" Maximum="16" Value="{Binding CelBands}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"
                                     ToolTip="1 is flat; 2 lit and shadow; more gives more steps" />
                         </DockPanel>
                         <DockPanel Margin="0,0,0,8">
