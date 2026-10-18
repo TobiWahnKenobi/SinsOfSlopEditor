@@ -138,13 +138,10 @@ public sealed class ParticleSystem
     }
 
     /// <summary>
-    /// In game every copy of an effect starts when its ship appears, so copies on different hardpoints emit out of step;
-    /// a random emission phase per seed gives the same.
+    /// Every emitter emits its first particle at its StartTime, then one per 1/EmitRate seconds, as the file says
+    /// (a blink light flashes at once, then every few seconds).
     /// </summary>
-    private void StartPhases()
-    {
-        for (int e = 0; e < _emitAccumulator.Length; e++) _emitAccumulator[e] = (float)_random.NextDouble();
-    }
+    private void StartPhases() => Array.Fill(_emitAccumulator, 1f);
 
     public ParticleEffectDefinition Definition => _definition;
     public List<Particle> Particles { get; } = [];
