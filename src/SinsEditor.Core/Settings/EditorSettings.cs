@@ -45,6 +45,8 @@ public sealed class EditorSettings
     public double MeshUnitsPerMeter { get; set; } = 1;
     /// <summary>Stored mesh view positions, keyed by mesh name (case-insensitive); the editor's, not the mod's.</summary>
     public Dictionary<string, List<SavedMeshView>> MeshViews { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Named cel-shading styles of the mesh view.</summary>
+    public List<CelStyle> CelPresets { get; set; } = [];
     /// <summary>Most recent first.</summary>
     public List<string> RecentMods { get; set; } = [];
     /// <summary>Keyed by full mod path, case-insensitive.</summary>

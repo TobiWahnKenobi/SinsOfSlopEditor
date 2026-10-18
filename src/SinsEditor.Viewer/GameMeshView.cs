@@ -64,6 +64,10 @@ public sealed class GameMeshView : Grid
     public static readonly DependencyProperty CameraProperty = DependencyProperty.Register(nameof(Camera), typeof(OrbitCamera?), typeof(GameMeshView),
         new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.BindsTwoWayByDefault, (d, e) => ((GameMeshView)d).OnCameraChanged((OrbitCamera?)e.NewValue)));
 
+    /// <summary>Draw in the editor's cel style instead of with the game's shaders (null: game shaders).</summary>
+    public static readonly DependencyProperty CelProperty = DependencyProperty.Register(nameof(Cel), typeof(Core.Settings.CelStyle), typeof(GameMeshView),
+        new PropertyMetadata(null, (d, _) => ((GameMeshView)d).Invalidate()));
+
     /// <summary>Direction from the model to the sun; null for the default.</summary>
     public static readonly DependencyProperty LightDirectionProperty = DependencyProperty.Register(nameof(LightDirection), typeof(Vector3?), typeof(GameMeshView),
         new PropertyMetadata(null, (d, _) => ((GameMeshView)d).Invalidate()));
@@ -163,6 +167,12 @@ public sealed class GameMeshView : Grid
         Invalidate();
     }
 
+    public Core.Settings.CelStyle? Cel
+    {
+        get => (Core.Settings.CelStyle?)GetValue(CelProperty);
+        set => SetValue(CelProperty, value);
+    }
+
     public Vector3? LightDirection
     {
         get => (Vector3?)GetValue(LightDirectionProperty);
@@ -197,7 +207,8 @@ public sealed class GameMeshView : Grid
             double viewAspect = ActualWidth / Math.Max(1, ActualHeight), pictureAspect = (double)request.Width / request.Height;
             var camera = pictureAspect < viewAspect ? _camera with { Distance = _camera.Distance * (float)(viewAspect / pictureAspect) } : _camera;
             pixels = _renderer.Render(width, height, camera,
-                new GameRenderOptions(false, false, ShowParticles, Transparent: true, Time: (float)ParticleTime, LightDirection: LightDirection));
+                new GameRenderOptions(false, false, ShowParticles, Transparent: true, Time: (float)ParticleTime, LightDirection: LightDirection,
+                    Cel: Cel, LineScale: factor));
         }
         catch (SharpDX.SharpDXException ex)
         {
@@ -326,7 +337,8 @@ public sealed class GameMeshView : Grid
         byte[] pixels;
         try
         {
-            pixels = _renderer.Render(width, height, _camera, new GameRenderOptions(ShowPoints, ShowWireframe, ShowParticles, Time: (float)ParticleTime, LightDirection: LightDirection));
+            pixels = _renderer.Render(width, height, _camera, new GameRenderOptions(ShowPoints, ShowWireframe, ShowParticles, Time: (float)ParticleTime, LightDirection: LightDirection,
+                Cel: Cel, LineScale: (float)dpi.DpiScaleX));
         }
         catch (SharpDX.SharpDXException ex)
         {

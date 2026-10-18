@@ -6,6 +6,7 @@ using SharpDX.Direct3D11;
 using SharpDX.DXGI;
 using SharpDX.Mathematics.Interop;
 using SinsEditor.Core.Meshes;
+using SinsEditor.Core.Settings;
 using SinsEditor.Core.Textures;
 using Buffer = SharpDX.Direct3D11.Buffer;
 using Device = SharpDX.Direct3D11.Device;
@@ -17,10 +18,11 @@ namespace SinsEditor.Viewer;
 /// <summary>
 /// Display options of the game-shader view. <paramref name="Transparent"/> renders without skybox or background and gives
 /// the picture an alpha channel (mesh coverage, particle brightness), for exporting images. <paramref name="LightDirection"/>
-/// points from the model to the sun (null: <see cref="DefaultLightDirection"/>).
+/// points from the model to the sun (null: <see cref="DefaultLightDirection"/>). <paramref name="Cel"/> draws the meshes in the
+/// editor's cel style instead of with the game's shaders; <paramref name="LineScale"/> scales its line width (supersampled pictures).
 /// </summary>
 public sealed record GameRenderOptions(bool ShowPoints, bool Wireframe, bool ShowParticles = true, bool Transparent = false,
-    PixelImage? Background = null, float Time = 0, Vector3? LightDirection = null)
+    PixelImage? Background = null, float Time = 0, Vector3? LightDirection = null, CelStyle? Cel = null, float LineScale = 1)
 {
     /// <summary>Above, in front and to the left of the ship.</summary>
     public static Vector3 DefaultLightDirection { get; } = Vector3.Normalize(new Vector3(-0.6f, 0.9f, 0.8f));
@@ -143,6 +145,11 @@ public sealed class GameRenderer : IDisposable
     private VertexShader? _backgroundVs;
     private PixelShader? _backgroundPs;
     private DepthStencilView? _depthView;
+    // Normals and depth of the cel style, single-sampled.
+    private Texture2D? _geometry, _geometryDepth;
+    private RenderTargetView? _geometryView;
+    private ShaderResourceView? _geometryResource;
+    private DepthStencilView? _geometryDepthView;
 
     // Shadow map from the light.
     private readonly Texture2D _shadow, _shadowDepth;
@@ -527,6 +534,221 @@ public sealed class GameRenderer : IDisposable
         };
     }
 
+    // ---- Cel shading: the editor's own shaders (not the game's), for icon-like pictures ----
+
+    private const string CelShaders = """
+        cbuffer Cel : register(b0)
+        {
+            row_major float4x4 World;
+            row_major float4x4 WorldViewProjection;
+            row_major float4x4 WorldView;
+            float4 FillColor;
+            float4 Light;      // xyz: direction to the sun (world), w: bands
+            float4 Params;     // x: shadow darkness, y: use texture, z: team colour, w: unused
+            float4 Team;
+        };
+        Texture2D Diffuse : register(t0);
+        SamplerState DiffuseSampler : register(s0);
+
+        struct VI { float3 p : POSITION; float3 n : NORMAL; float3 t : TANGENT; float3 b : BINORMAL; float2 uv : TEXCOORD0; float2 uv1 : TEXCOORD1; float4 c : COLOR; };
+        struct VO { float4 p : SV_Position; float3 n : NORMAL; float2 uv : TEXCOORD0; float3 vn : TEXCOORD1; float vz : TEXCOORD2; };
+
+        VO CelVS(VI i)
+        {
+            VO o;
+            o.p = mul(float4(i.p, 1), WorldViewProjection);
+            o.n = mul(float4(i.n, 0), World).xyz;
+            o.vn = mul(float4(i.n, 0), WorldView).xyz;
+            o.vz = mul(float4(i.p, 1), WorldView).z;
+            o.uv = i.uv;
+            return o;
+        }
+
+        float4 CelPS(VO i) : SV_Target
+        {
+            float3 n = normalize(i.n);
+            float lit = saturate(dot(n, normalize(Light.xyz)));
+            float bands = max(1, Light.w);
+            float shade = bands <= 1 ? 1 : min(floor(lit * bands), bands - 1) / (bands - 1);
+            float brightness = lerp(1 - Params.x, 1, shade);
+            float4 fill = FillColor;
+            if (Params.y > 0.5)
+            {
+                float4 t = Diffuse.Sample(DiffuseSampler, i.uv);
+                fill = float4(lerp(t.rgb, Team.rgb, t.a * Params.z), 1);
+            }
+            return float4(fill.rgb * brightness, 1);
+        }
+
+        // Normals (view space) and view depth for finding lines; w = 0 where there's no mesh.
+        float4 GeometryPS(VO i) : SV_Target { return float4(normalize(i.vn), max(i.vz, 1e-3)); }
+
+        cbuffer Edge : register(b0)
+        {
+            float4 LineColor;
+            float4 LineParams;   // x: width (px; lines reach half of it to each side), y: cos of the crease angle, z: inner lines, w: relative depth jump
+        };
+        Texture2D<float4> Geometry : register(t0);
+
+        struct EO { float4 p : SV_Position; float2 uv : TEXCOORD0; };
+        EO EdgeVS(uint id : SV_VertexID)
+        {
+            EO o;
+            float2 t = float2((id << 1) & 2, id & 2);
+            o.p = float4(t * float2(2, -2) + float2(-1, 1), 0, 1);
+            o.uv = t;
+            return o;
+        }
+
+        float Differs(float4 c, float4 s)
+        {
+            bool covered = c.w > 0, other = s.w > 0;
+            if (covered != other) return 1;
+            if (!covered || LineParams.z < 0.5) return 0;
+            if (abs(s.w - c.w) > LineParams.w * min(c.w, s.w)) return 1;
+            return dot(c.xyz, s.xyz) < LineParams.y ? 1 : 0;
+        }
+
+        float4 EdgePS(EO i) : SV_Target
+        {
+            int2 size;
+            Geometry.GetDimensions(size.x, size.y);
+            int2 px = int2(i.p.xy);
+            float4 c = Geometry.Load(int3(px, 0));
+            float width = max(0.5, LineParams.x);
+            float edge = 0;
+            [unroll] for (int k = 0; k < 8; k++)
+            {
+                float a = k * 0.785398;
+                float2 d = float2(cos(a), sin(a));
+                [unroll] for (int r = 1; r <= 2; r++)
+                {
+                    int2 q = clamp(px + int2(round(d * width * r / 4)), int2(0, 0), size - 1);
+                    edge = max(edge, Differs(c, Geometry.Load(int3(q, 0))));
+                }
+            }
+            return float4(LineColor.rgb, LineColor.a * edge);
+        }
+
+        // The same lines as coverage for transparent pictures.
+        float4 EdgeMaskPS(EO i) : SV_Target { float4 e = EdgePS(i); return float4(1, 1, 1, e.a); }
+        """;
+
+    private VertexShader? _celVs, _edgeVs;
+    private PixelShader? _celPs, _geometryPs, _edgePs, _edgeMaskPs;
+    private InputLayout? _celLayout;
+    private Buffer? _celCb;
+    private BlendState? _alphaBlend;
+
+    private void EnsureCelShaders()
+    {
+        if (_celVs != null) return;
+        byte[] Compile(string entry, string profile)
+        {
+            using var result = ShaderBytecode.Compile(CelShaders, entry, profile, ShaderFlags.OptimizationLevel3);
+            return result.Bytecode.Data;
+        }
+        byte[] vs = Compile("CelVS", "vs_4_0");
+        _celVs = new VertexShader(_device, vs);
+        _celLayout = new InputLayout(_device, vs, Layout);
+        _celPs = new PixelShader(_device, Compile("CelPS", "ps_4_0"));
+        _geometryPs = new PixelShader(_device, Compile("GeometryPS", "ps_4_0"));
+        _edgeVs = new VertexShader(_device, Compile("EdgeVS", "vs_4_0"));
+        _edgePs = new PixelShader(_device, Compile("EdgePS", "ps_4_0"));
+        _edgeMaskPs = new PixelShader(_device, Compile("EdgeMaskPS", "ps_4_0"));
+        _celCb = new Buffer(_device, 256, ResourceUsage.Default, BindFlags.ConstantBuffer, CpuAccessFlags.None, ResourceOptionFlags.None, 0);
+        var blend = BlendStateDescription.Default();
+        blend.RenderTarget[0].IsBlendEnabled = true;
+        blend.RenderTarget[0].SourceBlend = BlendOption.SourceAlpha;
+        blend.RenderTarget[0].DestinationBlend = BlendOption.InverseSourceAlpha;
+        blend.RenderTarget[0].SourceAlphaBlend = BlendOption.One;
+        blend.RenderTarget[0].DestinationAlphaBlend = BlendOption.InverseSourceAlpha;
+        _alphaBlend = new BlendState(_device, blend);
+    }
+
+    private void DisposeCelShaders()
+    {
+        _celVs?.Dispose(); _edgeVs?.Dispose(); _celPs?.Dispose(); _geometryPs?.Dispose(); _edgePs?.Dispose(); _edgeMaskPs?.Dispose();
+        _celLayout?.Dispose(); _celCb?.Dispose(); _alphaBlend?.Dispose();
+    }
+
+    /// <summary>
+    /// The meshes in the cel style: their geometry (normals, depth) first into a separate target for the lines, then the
+    /// fill in light bands into the colour target. Lines are drawn by <see cref="DrawCelLines"/> afterwards.
+    /// </summary>
+    private void DrawCel(CelStyle style, Matrix4x4 cameraOffset, Matrix4x4 view, Matrix4x4 projection, Vector3 lightDirection, Vector4 team, float time)
+    {
+        EnsureCelShaders();
+        var fill = CelStyle.ParseColor(style.FillColor) ?? Vector4.One;
+
+        void Draw(PixelShader ps, DepthStencilState depth)
+        {
+            foreach (var item in _items)
+            {
+                var world = item.Item.PlacementAtTime(time) * cameraOffset;
+                var data = new float[64];
+                M(world).CopyTo(data, 0);
+                M(world * view * projection).CopyTo(data, 16);
+                M(world * view).CopyTo(data, 32);
+                V(fill).CopyTo(data, 48);
+                V(new Vector4(lightDirection, Math.Clamp(style.Bands, 1, 8))).CopyTo(data, 52);
+                V(new Vector4((float)Math.Clamp(style.Shadow, 0, 1), style.UseTexture ? 1 : 0, style.TeamColor ? 1 : 0, 0)).CopyTo(data, 56);
+                V(team).CopyTo(data, 60);
+                _context.UpdateSubresource(data, _celCb);
+                _context.InputAssembler.InputLayout = _celLayout;
+                _context.InputAssembler.SetVertexBuffers(0, new VertexBufferBinding(item.Vertices, Stride, 0));
+                _context.VertexShader.Set(_celVs);
+                _context.VertexShader.SetConstantBuffer(0, _celCb);
+                _context.PixelShader.Set(ps);
+                _context.PixelShader.SetConstantBuffer(0, _celCb);
+                _context.PixelShader.SetSampler(0, Sampler(false, false));
+                _context.OutputMerger.SetBlendState(_opaque);
+                _context.OutputMerger.SetDepthStencilState(depth);
+                _context.Rasterizer.State = _noCull;
+                foreach (var (indices, count, materialIndex) in item.Groups)
+                {
+                    var material = materialIndex < item.Item.Materials.Count ? item.Item.Materials[materialIndex] : null;
+                    _context.PixelShader.SetShaderResource(0, material?.Diffuse is { } diffuse ? TextureView(diffuse) : _white);
+                    _context.InputAssembler.SetIndexBuffer(indices, Format.R32_UInt, 0);
+                    _context.DrawIndexed(count, 0, 0);
+                }
+            }
+        }
+
+        // Geometry for the lines, without multisampling so every pixel has one exact normal and depth.
+        _context.OutputMerger.SetTargets(_geometryDepthView, _geometryView);
+        _context.ClearRenderTargetView(_geometryView, new RawColor4(0, 0, 0, 0));
+        _context.ClearDepthStencilView(_geometryDepthView, DepthStencilClearFlags.Depth, 1f, 0);
+        Draw(_geometryPs!, _depthOn);
+
+        _context.OutputMerger.SetTargets(_depthView, _colorView);
+        Draw(_celPs!, _depthOn);
+        _context.PixelShader.SetShaderResource(0, null);
+    }
+
+    /// <summary>Lines where the geometry target changes (outline, creases, overlaps), blended over the colour (or mask) target.</summary>
+    private void DrawCelLines(CelStyle style, RenderTargetView target, bool mask, float scale)
+    {
+        if (!style.Outline) return;
+        var color = CelStyle.ParseColor(style.LineColor) ?? new Vector4(0, 0, 0, 1);
+        var data = new float[64];
+        V(color).CopyTo(data, 0);
+        V(new Vector4((float)Math.Max(0.5, style.LineWidth * scale), MathF.Cos((float)Math.Clamp(style.CreaseAngle, 1, 179) * MathF.PI / 180),
+            style.InnerLines ? 1 : 0, 0.04f)).CopyTo(data, 4);
+        _context.UpdateSubresource(data, _celCb);
+        _context.OutputMerger.SetTargets((DepthStencilView?)null, target);
+        _context.InputAssembler.InputLayout = null;
+        _context.VertexShader.Set(_edgeVs);
+        _context.PixelShader.Set(mask ? _edgeMaskPs : _edgePs);
+        _context.PixelShader.SetConstantBuffer(0, _celCb);
+        _context.PixelShader.SetShaderResource(0, _geometryResource);
+        _context.OutputMerger.SetBlendState(_alphaBlend);
+        _context.OutputMerger.SetDepthStencilState(_noDepth);
+        _context.Rasterizer.State = _noCull;
+        _context.Draw(3, 0);
+        _context.PixelShader.SetShaderResource(0, null);
+        _context.OutputMerger.SetTargets(_depthView, _colorView);
+    }
     // ---- Rendering ----
 
     private void EnsureTargets(int width, int height)
@@ -574,10 +796,24 @@ public sealed class GameRenderer : IDisposable
             Width = width, Height = height, MipLevels = 1, ArraySize = 1, Format = Format.B8G8R8A8_UNorm,
             SampleDescription = new SampleDescription(1, 0), Usage = ResourceUsage.Staging, CpuAccessFlags = CpuAccessFlags.Read,
         });
+        _geometry = new Texture2D(_device, new Texture2DDescription
+        {
+            Width = width, Height = height, MipLevels = 1, ArraySize = 1, Format = Format.R32G32B32A32_Float,
+            SampleDescription = new SampleDescription(1, 0), Usage = ResourceUsage.Default, BindFlags = BindFlags.RenderTarget | BindFlags.ShaderResource,
+        });
+        _geometryView = new RenderTargetView(_device, _geometry);
+        _geometryResource = new ShaderResourceView(_device, _geometry);
+        _geometryDepth = new Texture2D(_device, new Texture2DDescription
+        {
+            Width = width, Height = height, MipLevels = 1, ArraySize = 1, Format = Format.D32_Float,
+            SampleDescription = new SampleDescription(1, 0), Usage = ResourceUsage.Default, BindFlags = BindFlags.DepthStencil,
+        });
+        _geometryDepthView = new DepthStencilView(_device, _geometryDepth);
     }
 
     private void DisposeTargets()
     {
+        _geometryView?.Dispose(); _geometryResource?.Dispose(); _geometry?.Dispose(); _geometryDepthView?.Dispose(); _geometryDepth?.Dispose();
         _colorView?.Dispose(); _color?.Dispose(); _depthView?.Dispose(); _depthBuffer?.Dispose(); _resolved?.Dispose(); _staging?.Dispose();
         _maskView?.Dispose(); _mask?.Dispose(); _maskResolved?.Dispose(); _maskStaging?.Dispose();
         _colorView = null; _color = null;
@@ -617,7 +853,7 @@ public sealed class GameRenderer : IDisposable
         var lightView = LookAtLH(center + lightDirection * radius * 3, center, Math.Abs(lightDirection.Y) > 0.99f ? Vector3.UnitZ : Vector3.UnitY);
         var lightProjection = OrthoLH(radius * 2.2f, radius * 2.2f, 0, radius * 6);
         var shadowBias = new Matrix4x4(0.5f, 0, 0, 0, 0, -0.5f, 0, 0, 0, 0, 1, 0, 0.5f, 0.5f, 0, 1);
-        RenderShadowMap(lightView * lightProjection, options.Time);
+        if (options.Cel is null) RenderShadowMap(lightView * lightProjection, options.Time);
 
         // The game's shaders take world positions relative to the camera (the camera sits at the origin).
         var eye = camera.Eye;
@@ -646,16 +882,23 @@ public sealed class GameRenderer : IDisposable
             DrawItem(sky, Matrix4x4.CreateScale(scale), view, projection, eye, Matrix4x4.Identity, scene!, lightPosition, radius, noCull: true);
         }
 
+        if (options.Cel is { } cel && scene != null) DrawCel(cel, cameraOffset, view, projection, lightDirection, scene.TeamColor, options.Time);
         foreach (var item in _items)
         {
             var placement = item.Item.PlacementAtTime(options.Time);
             var world = placement * cameraOffset;
-            DrawItem(item, world, view, projection, eye, placement * lightView * lightProjection * shadowBias, scene!, lightPosition, radius);
+            if (options.Cel is null)
+                DrawItem(item, world, view, projection, eye, placement * lightView * lightProjection * shadowBias, scene!, lightPosition, radius);
             if (options.Wireframe)
                 DrawHelper(item.Vertices, item.Groups.Select(g => (g.Indices, g.Count)), world * view * projection, new Vector4(0.35f, 0.8f, 1f, 1f), _wirePs, _wireRaster, _depthRead);
         }
 
         if (options.Transparent) RenderMask(cameraOffset * view * projection, options.Time);
+        if (options.Cel is { } style)
+        {
+            DrawCelLines(style, _colorView!, mask: false, options.LineScale);
+            if (options.Transparent) DrawCelLines(style, _maskView!, mask: true, options.LineScale);
+        }
         if (options.ShowParticles && scene?.Particles is { } particles)
         {
             _context.OutputMerger.SetTargets(_depthView, _colorView);
@@ -950,6 +1193,7 @@ public sealed class GameRenderer : IDisposable
         _helperVs.Dispose(); _flatPs.Dispose(); _wirePs.Dispose(); _depthPs.Dispose(); _helperLayout.Dispose(); _helperCb.Dispose();
         _solid.Dispose(); _noCull.Dispose(); _wireRaster.Dispose(); _depthOn.Dispose(); _depthRead.Dispose(); _opaque.Dispose();
         _noise3D.Dispose();
+        DisposeCelShaders();
         _noDepth.Dispose(); _backgroundVs?.Dispose(); _backgroundPs?.Dispose();
         _context.Dispose();
         _device.Dispose();

@@ -38,6 +38,101 @@
                         <ColumnDefinition Width="100" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
+                    <TextBlock Text="Renderer" VerticalAlignment="Center" />
+                    <ComboBox Grid.Column="1" ItemsSource="{Binding RenderStyles}" SelectedItem="{Binding RenderStyle}" Margin="0,2"
+                              ToolTip="Game shaders: as in the game. Cel shading: the editor's own flat style with outlines, e.g. for HUD icons." />
+                </Grid>
+
+                <!-- Cel shading settings and presets -->
+                <Border Visibility="{Binding IsCelShading, Converter={StaticResource BoolToVisibility}}" Style="{StaticResource Card}" Padding="10" Margin="0,2,0,8">
+                    <StackPanel>
+                        <DockPanel Margin="0,0,0,4">
+                            <TextBlock DockPanel.Dock="Left" Text="Preset" Width="90" VerticalAlignment="Center" />
+                            <Button DockPanel.Dock="Right" Content="&#xE74D;" FontFamily="Segoe Fluent Icons, Segoe MDL2 Assets" Padding="6,3" MinWidth="0" Margin="4,0,0,0"
+                                    Command="{Binding DeleteCelPresetCommand}" ToolTip="Delete this preset" />
+                            <ComboBox ItemsSource="{Binding CelPresets}" SelectedItem="{Binding SelectedCelPreset}" DisplayMemberPath="Name"
+                                      ToolTip="Choose a preset to load it" />
+                        </DockPanel>
+                        <DockPanel Margin="0,0,0,8">
+                            <TextBlock DockPanel.Dock="Left" Text="Save as" Width="90" VerticalAlignment="Center" />
+                            <Button DockPanel.Dock="Right" Content="Default" Command="{Binding ResetCelCommand}" Margin="4,0,0,0" ToolTip="Back to the default style" />
+                            <Button DockPanel.Dock="Right" Content="Save" Command="{Binding SaveCelPresetCommand}" Margin="4,0,0,0"
+                                    ToolTip="Saves the current style under this name (in the editor settings, for every mod)" />
+                            <TextBox Text="{Binding NewCelPresetName, UpdateSourceTrigger=PropertyChanged}" ToolTip="Preset name" />
+                        </DockPanel>
+
+                        <TextBlock Text="Fill" FontWeight="SemiBold" Margin="0,0,0,2" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,2">
+                            <RadioButton Content="Texture" IsChecked="{Binding CelUseTexture}" GroupName="CelFill" Margin="0,0,12,0" />
+                            <RadioButton Content="One colour" IsChecked="{Binding CelUseMono}" GroupName="CelFill" />
+                        </StackPanel>
+                        <CheckBox Content="Team colour on the texture" IsChecked="{Binding CelTeamColor}" Margin="0,0,0,4"
+                                  Visibility="{Binding CelUseTexture, Converter={StaticResource BoolToVisibility}}" />
+                        <StackPanel Visibility="{Binding CelUseMono, Converter={StaticResource BoolToVisibility}}" Margin="0,0,0,4">
+                            <DockPanel>
+                                <Border DockPanel.Dock="Left" Width="22" Height="22" Background="{Binding CelFillBrush}" BorderBrush="Gray" BorderThickness="1" CornerRadius="3" Margin="0,0,6,0" />
+                                <TextBox Text="{Binding CelFillColor, UpdateSourceTrigger=PropertyChanged, Delay=300}" ToolTip="Fill colour as #RRGGBB" />
+                            </DockPanel>
+                            <ItemsControl ItemsSource="{Binding CelSwatches}" Margin="0,3,0,0">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Width="18" Height="18" MinWidth="0" MinHeight="0" Padding="0" Margin="0,0,3,3" Background="{Binding}" BorderBrush="Gray" ToolTip="{Binding}"
+                                                Command="{Binding DataContext.SetCelFillCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <DockPanel Margin="0,4,0,2">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding CelBands}" Width="28" TextAlignment="Right" VerticalAlignment="Center" />
+                            <TextBlock DockPanel.Dock="Left" Text="Light bands" Width="90" VerticalAlignment="Center" />
+                            <Slider Minimum="1" Maximum="8" Value="{Binding CelBands}" IsSnapToTickEnabled="True" TickFrequency="1" VerticalAlignment="Center"
+                                    ToolTip="1 is flat; 2 lit and shadow; more gives more steps" />
+                        </DockPanel>
+                        <DockPanel Margin="0,0,0,8">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding CelShadow, StringFormat={}{0:P0}}" Width="40" TextAlignment="Right" VerticalAlignment="Center" />
+                            <TextBlock DockPanel.Dock="Left" Text="Shadow" Width="90" VerticalAlignment="Center" />
+                            <Slider Minimum="0" Maximum="1" Value="{Binding CelShadow}" VerticalAlignment="Center" ToolTip="How dark the darkest band is" />
+                        </DockPanel>
+
+                        <CheckBox Content="Lines" FontWeight="SemiBold" IsChecked="{Binding CelOutline}" Margin="0,0,0,2" />
+                        <StackPanel Visibility="{Binding CelOutline, Converter={StaticResource BoolToVisibility}}">
+                            <CheckBox Content="Inner lines (creases, overlaps)" ToolTip="Not only the outline: also where surfaces meet at an angle or parts overlap" IsChecked="{Binding CelInnerLines}" Margin="0,0,0,4" />
+                            <DockPanel>
+                                <Border DockPanel.Dock="Left" Width="22" Height="22" Background="{Binding CelLineBrush}" BorderBrush="Gray" BorderThickness="1" CornerRadius="3" Margin="0,0,6,0" />
+                                <TextBox Text="{Binding CelLineColor, UpdateSourceTrigger=PropertyChanged, Delay=300}" ToolTip="Line colour as #RRGGBB" />
+                            </DockPanel>
+                            <ItemsControl ItemsSource="{Binding CelSwatches}" Margin="0,3,0,4">
+                                <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel /></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Width="18" Height="18" MinWidth="0" MinHeight="0" Padding="0" Margin="0,0,3,3" Background="{Binding}" BorderBrush="Gray" ToolTip="{Binding}"
+                                                Command="{Binding DataContext.SetCelLineCommand, RelativeSource={RelativeSource AncestorType=UserControl}}" CommandParameter="{Binding}" />
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                            <DockPanel Margin="0,0,0,2">
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding CelLineWidth, StringFormat={}{0:0.#} px}" Width="44" TextAlignment="Right" VerticalAlignment="Center" />
+                                <TextBlock DockPanel.Dock="Left" Text="Width" Width="90" VerticalAlignment="Center" />
+                                <Slider Minimum="0.5" Maximum="12" Value="{Binding CelLineWidth}" SmallChange="0.5" VerticalAlignment="Center"
+                                        ToolTip="In pixels of the view, and of the picture when exporting" />
+                            </DockPanel>
+                            <DockPanel Visibility="{Binding CelInnerLines, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock DockPanel.Dock="Right" Text="{Binding CelCreaseAngle, StringFormat={}{0:0}°}" Width="44" TextAlignment="Right" VerticalAlignment="Center" />
+                                <TextBlock DockPanel.Dock="Left" Text="Crease angle" Width="90" VerticalAlignment="Center" />
+                                <Slider Minimum="5" Maximum="120" Value="{Binding CelCreaseAngle}" VerticalAlignment="Center"
+                                        ToolTip="Surfaces meeting at a sharper angle than this get a line; lower means more lines" />
+                            </DockPanel>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <Grid Margin="0,0,0,4" Visibility="{Binding UseGameShaders, Converter={StaticResource BoolToVisibility}}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="100" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
@@ -251,7 +346,7 @@
             <viewer:GameMeshView Scene="{Binding GameScene}" ShowPoints="{Binding ShowPoints}" ShowWireframe="{Binding ShowWireframe}"
                                  ShowParticles="{Binding ShowParticles}" ParticleTime="{Binding ParticleTime}" IsPlaying="{Binding IsPlaying}"
                                  PlaybackSpeed="{Binding PlaybackSpeed}" ParticleDuration="{Binding ParticleDuration}" Capture="{Binding Capture}"
-                                 Camera="{Binding Camera}" LightDirection="{Binding LightDirection}" />
+                                 Camera="{Binding Camera}" LightDirection="{Binding LightDirection}" Cel="{Binding ViewCel}" />
 
             <!-- View palette: slides in from the right. -->
             <ToggleButton HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0" Padding="8,4" Panel.ZIndex="2"

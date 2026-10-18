@@ -310,6 +310,135 @@ public sealed partial class MeshViewModel : PageViewModel
         if (Camera is { } c) LightDirection = System.Numerics.Vector3.Normalize(c.Direction + new System.Numerics.Vector3(0, 0.3f, 0));
     }
 
+    // ---- Cel shading: the editor's own renderer for icon-like pictures, with named presets ----
+
+    public IReadOnlyList<string> RenderStyles { get; } = ["Game shaders", "Cel shading"];
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsCelShading), nameof(ViewCel))]
+    private string _renderStyle = "Game shaders";
+
+    public bool IsCelShading => RenderStyle == "Cel shading";
+
+    /// <summary>The style the view draws with: null for the game's shaders.</summary>
+    public CelStyle? ViewCel => IsCelShading ? Cel : null;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ViewCel))]
+    private CelStyle _cel = CelStyle.Default;
+
+    private static readonly string[] CelProperties =
+        [nameof(CelUseTexture), nameof(CelUseMono), nameof(CelTeamColor), nameof(CelFillColor), nameof(CelFillBrush), nameof(CelBands), nameof(CelShadow),
+         nameof(CelOutline), nameof(CelInnerLines), nameof(CelLineColor), nameof(CelLineBrush), nameof(CelLineWidth), nameof(CelCreaseAngle)];
+
+    partial void OnCelChanged(CelStyle value)
+    {
+        foreach (string name in CelProperties) OnPropertyChanged(name);
+    }
+
+    public bool CelUseTexture { get => Cel.UseTexture; set => Cel = Cel with { UseTexture = value }; }
+    public bool CelUseMono { get => !Cel.UseTexture; set => Cel = Cel with { UseTexture = !value }; }
+    public bool CelTeamColor { get => Cel.TeamColor; set => Cel = Cel with { TeamColor = value }; }
+    public int CelBands { get => Cel.Bands; set => Cel = Cel with { Bands = Math.Clamp(value, 1, 8) }; }
+    public double CelShadow { get => Cel.Shadow; set => Cel = Cel with { Shadow = Math.Clamp(value, 0, 1) }; }
+    public bool CelOutline { get => Cel.Outline; set => Cel = Cel with { Outline = value }; }
+    public bool CelInnerLines { get => Cel.InnerLines; set => Cel = Cel with { InnerLines = value }; }
+    public double CelLineWidth { get => Cel.LineWidth; set => Cel = Cel with { LineWidth = Math.Clamp(value, 0.5, 16) }; }
+    public double CelCreaseAngle { get => Cel.CreaseAngle; set => Cel = Cel with { CreaseAngle = Math.Clamp(value, 1, 179) }; }
+
+    /// <summary>Colours as #RRGGBB; text that isn't a colour is ignored until it is one.</summary>
+    public string CelFillColor
+    {
+        get => Cel.FillColor;
+        set { if (CelStyle.ParseColor(value) != null) Cel = Cel with { FillColor = value.Trim() }; }
+    }
+
+    public string CelLineColor
+    {
+        get => Cel.LineColor;
+        set { if (CelStyle.ParseColor(value) != null) Cel = Cel with { LineColor = value.Trim() }; }
+    }
+
+    public System.Windows.Media.Brush CelFillBrush => Swatch(Cel.FillColor);
+    public System.Windows.Media.Brush CelLineBrush => Swatch(Cel.LineColor);
+
+    private static System.Windows.Media.Brush Swatch(string color)
+    {
+        var c = CelStyle.ParseColor(color) ?? System.Numerics.Vector4.Zero;
+        var brush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb((byte)(c.W * 255), (byte)(c.X * 255), (byte)(c.Y * 255), (byte)(c.Z * 255)));
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>Common colours to pick with one click.</summary>
+    public IReadOnlyList<string> CelSwatches { get; } =
+        ["#FFFFFF", "#C8C8C8", "#808080", "#404040", "#101418", "#000000", "#E04040", "#F0A030", "#F0E060", "#50C060", "#40B0E0", "#4060D0", "#9050C0", "#9FB0C8"];
+
+    [RelayCommand]
+    private void SetCelFill(string? color) { if (color != null) CelFillColor = color; }
+
+    [RelayCommand]
+    private void SetCelLine(string? color) { if (color != null) CelLineColor = color; }
+
+    public System.Collections.ObjectModel.ObservableCollection<CelStyle> CelPresets { get; } = [];
+
+    [ObservableProperty]
+    private CelStyle? _selectedCelPreset;
+
+    [ObservableProperty]
+    private string _newCelPresetName = "";
+
+    /// <summary>Choosing a preset loads it.</summary>
+    partial void OnSelectedCelPresetChanged(CelStyle? value)
+    {
+        if (value is null) return;
+        Cel = value;
+        NewCelPresetName = value.Name;
+    }
+
+    private void LoadCelPresets()
+    {
+        CelPresets.Clear();
+        foreach (var preset in EditorSettings.Load().CelPresets) CelPresets.Add(preset);
+    }
+
+    private void StoreCelPresets()
+    {
+        var settings = EditorSettings.Load();
+        settings.CelPresets = [.. CelPresets];
+        settings.Save();
+    }
+
+    /// <summary>Saves the current style under the entered name, replacing a preset of that name.</summary>
+    [RelayCommand]
+    private void SaveCelPreset()
+    {
+        string name = NewCelPresetName.Trim();
+        if (name.Length == 0) name = $"Style {CelPresets.Count + 1}";
+        var preset = Cel with { Name = name };
+        int existing = CelPresets.ToList().FindIndex(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        if (existing >= 0) CelPresets[existing] = preset;
+        else CelPresets.Add(preset);
+        StoreCelPresets();
+        SelectedCelPreset = preset;
+    }
+
+    [RelayCommand]
+    private void DeleteCelPreset()
+    {
+        if (SelectedCelPreset is not { } preset) return;
+        CelPresets.Remove(preset);
+        SelectedCelPreset = null;
+        StoreCelPresets();
+    }
+
+    [RelayCommand]
+    private void ResetCel()
+    {
+        SelectedCelPreset = null;
+        Cel = CelStyle.Default;
+    }
+
     private void LoadSavedViews()
     {
         SavedViews.Clear();
@@ -719,6 +848,7 @@ public sealed partial class MeshViewModel : PageViewModel
         Skyboxes = GameShaders.Skyboxes(workspace);
         SavedViews.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasNoSavedViews));
         LoadSavedViews();
+        LoadCelPresets();
         _skybox = Skyboxes.FirstOrDefault(s => s.Equals("skybox02", StringComparison.OrdinalIgnoreCase)) ?? Skyboxes.FirstOrDefault();
         _shader = GameShaders.ForMesh(workspace, Name);
         UsedBy = workspace.Index.IncomingReferences(ReferenceKind.Mesh, Name)

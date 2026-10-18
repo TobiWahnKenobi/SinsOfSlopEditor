@@ -214,4 +214,36 @@ public sealed class GameRendererTests(ITestOutputHelper output) : IAsyncLifetime
         var withBackground = renderer.Render(200, 150, OrbitCamera.Frame(mesh), new GameRenderOptions(false, false, Background: background));
         Assert.Equal(200, withBackground[0]);
     }
+
+    [SkippableFact]
+    public async Task Cel_shading_draws_flat_bands_with_outlines()
+    {
+        Skip.If(_workspace is null, "Game directory not configured.");
+        var ws = _workspace!;
+        var mesh = (await MeshLoader.LoadAsync(ws, "Frigate_PhaseAntiFighter"))!.Data;
+        var scene = new GameScene(mesh, [new GameSceneItem(mesh, System.Numerics.Matrix4x4.Identity,
+            mesh.Materials.Select(m => GameMaterial.From(m, n => MeshLoader.LoadTexture(ws, n))).ToList(), GameShaders.ForDrawing(ws, "GS_ShadowedShip.fx"))],
+            null, null, new(0.2f, 0.4f, 0.9f, 1));
+        using var renderer = new GameRenderer();
+        renderer.SetScene(scene);
+        // Mono fill in red, two bands, green lines: only those colours (and their mixes at the edges) appear on the mesh.
+        var style = Core.Settings.CelStyle.Default with { UseTexture = false, FillColor = "#FF0000", Bands = 2, Shadow = 0.5, LineColor = "#00FF00", LineWidth = 3 };
+        var pixels = renderer.Render(200, 150, OrbitCamera.Frame(mesh), new GameRenderOptions(false, false, Transparent: true, LightDirection: new(1, 0.3f, 0), Cel: style));
+        Assert.Null(renderer.Error);
+        int lines = 0, full = 0, half = 0;
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            if (pixels[i + 3] < 255) continue;
+            byte b = pixels[i], g = pixels[i + 1], r = pixels[i + 2];
+            if (g > 200 && r < 40) lines++;
+            else if (r > 240 && g < 20) full++;
+            else if (r is > 110 and < 145 && g < 20) half++;
+        }
+        output.WriteLine($"lines {lines}, lit {full}, shadow {half}");
+        if (Environment.GetEnvironmentVariable("SINSEDITOR_REPORT") is { } dir) PngWriter.Save(new PixelImage(200, 150, pixels), Path.Combine(Path.GetDirectoryName(dir)!, "cel.png"));
+        Assert.True(lines > 100, "outline drawn");
+        Assert.True(full > 10 && half > 10 && full + half > 1000, "both bands drawn");
+        // The corner stays clear; the outline makes pixels just outside the mesh opaque too.
+        Assert.Equal(0, pixels[3]);
+    }
 }
