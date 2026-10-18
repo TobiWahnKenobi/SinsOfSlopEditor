@@ -166,7 +166,7 @@ public sealed partial class MeshViewModel : PageViewModel
     private double _particleTime = 3;
 
     [ObservableProperty]
-    private double _particleDuration = 30;
+    private double _particleDuration = 120;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasParticleEffects))]
@@ -822,8 +822,8 @@ public sealed partial class MeshViewModel : PageViewModel
             var attached = await MeshLoader.AttachedMeshesAsync(_workspace, data);
             _effects = await MeshLoader.AttachedEffectsAsync(_workspace, data);
             ParticleEffectCount = _effects.Count;
-            // At least 30 seconds; longer if an effect with a fixed lifetime lasts longer.
-            ParticleDuration = Math.Max(30, _effects.Select(e => e.Definition.HasInfiniteLifeTime ? 0f : e.Definition.TotalLifeTime).DefaultIfEmpty(0f).Max());
+            // 120 seconds; longer if an effect with a fixed lifetime lasts longer.
+            ParticleDuration = Math.Max(120, _effects.Select(e => e.Definition.HasInfiniteLifeTime ? 0f : e.Definition.TotalLifeTime).DefaultIfEmpty(0f).Max());
             var textureCache = new Dictionary<string, IReadOnlyList<MeshTexture?>>(StringComparer.OrdinalIgnoreCase);
             var attachments = new List<MeshAttachment>();
             foreach (var a in attached)
