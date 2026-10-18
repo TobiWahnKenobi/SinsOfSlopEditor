@@ -14,6 +14,7 @@
                     <Image Source="{DynamicResource CompanyLogo}" Height="20" Margin="0,0,6,0" RenderOptions.BitmapScalingMode="HighQuality" />
                     <TextBlock Text="{DynamicResource CopyrightText}" Style="{StaticResource Muted}" FontSize="12" VerticalAlignment="Center" />
                 </StackPanel>
+                <TextBlock Text="{DynamicResource AiNotice}" Style="{StaticResource Muted}" FontSize="12" Margin="0,2,0,0" />
             </StackPanel>
         </DockPanel>
         <TextBlock Text="Game folder" FontWeight="SemiBold" Margin="0,0,0,4" />

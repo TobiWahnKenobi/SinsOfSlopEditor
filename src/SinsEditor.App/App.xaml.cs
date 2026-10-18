@@ -65,6 +65,19 @@ public partial class App : Application
         }
 
         if (args.ResearchNames && shell.CurrentPage is Research.ResearchViewModel research) research.ShowNames = true;
+        if (args.ResearchField is { } field && shell.CurrentPage is Research.ResearchViewModel tree) tree.SelectedField = field;
+        // Screenshots of the mesh view: the view palette open, the cel style on a plain background.
+        if (shell.CurrentPage is Assets.MeshViewModel shown)
+        {
+            if (args.ViewPalette) shown.IsPaletteOpen = true;
+            if (args.Cel)
+            {
+                shown.RenderStyle = "Cel shading";
+                shown.Background = Assets.MeshViewModel.BackgroundChoices.First(b => b.Mode == Assets.BackgroundMode.None);
+                shown.ShowPoints = false;
+                shown.CelUseMono = true;
+            }
+        }
         if (args.LoadingPreview)
         {
             shell.LoadingText = "Reading entities (1,234 of 3,633)";
@@ -139,6 +152,8 @@ public partial class App : Application
             LoadingPreview = args.Contains("--loading-preview");
             BusyPreview = args.Contains("--busy-preview");
             ResearchNames = args.Contains("--research-names");
+            ViewPalette = args.Contains("--view-palette");
+            Cel = args.Contains("--cel");
             for (int i = 0; i < args.Length - 1; i++)
             {
                 string value = args[i + 1];
@@ -151,6 +166,7 @@ public partial class App : Application
                     case "--screenshot": Screenshot = value; i++; break;
                     case "--target": Target = ParseTarget(value); i++; break;
                     case "--search": Search = value; i++; break;
+                    case "--research-field": ResearchField = value; i++; break;
                 }
             }
         }
@@ -166,6 +182,9 @@ public partial class App : Application
         public bool LoadingPreview { get; }
         public bool BusyPreview { get; }
         public bool ResearchNames { get; }
+        public bool ViewPalette { get; }
+        public bool Cel { get; }
+        public string? ResearchField { get; }
 
         private static NavTarget ParseTarget(string value)
         {

@@ -16,10 +16,14 @@ public static class Branding
     /// <summary>The hyphen in "lt‑design" is non-breaking, so narrow places wrap after the slash instead.</summary>
     public static string CopyrightText => $"© {DateTime.Now.Year} Tobias Liebhart / lt‑design";
 
+    /// <summary>Shown wherever the logo is: the editor is entirely AI-built.</summary>
+    public const string AiNotice = "Built entirely by AI (Claude) · GPL-3.0";
+
     public static void Apply(Application app)
     {
         app.Resources["AppTitle"] = AppTitle;
         app.Resources["CopyrightText"] = CopyrightText;
+        app.Resources["AiNotice"] = AiNotice;
         app.Resources["EditorLogo"] = Image("EditorLogo.png");
         UpdateLogo(app);
         SystemEvents.UserPreferenceChanged += (_, e) =>

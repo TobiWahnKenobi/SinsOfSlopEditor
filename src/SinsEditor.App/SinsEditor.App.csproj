@@ -25,9 +25,13 @@
     <ApplicationIcon>Assets\App.ico</ApplicationIcon>
     <RootNamespace>SinsEditor.App</RootNamespace>
     <Product>Sins of Slop Editor</Product>
-    <Version>0.2.0</Version>
+    <Version>1.0.0</Version>
     <Company>lt-design</Company>
-    <Copyright>© Tobias Liebhart / lt-design</Copyright>
+    <Copyright>© Tobias Liebhart / lt-design. GPL-3.0-or-later; logos all rights reserved. Built entirely by AI (Claude).</Copyright>
+    <Description>Mod editor for Sins of a Solar Empire: Rebellion, built entirely by AI (Claude).</Description>
+    <RepositoryUrl>https://github.com/TobiWahnKenobi/SinsOfSlopEditor</RepositoryUrl>
+    <PackageProjectUrl>https://tobiwahnkenobi.github.io/SinsOfSlopEditor/</PackageProjectUrl>
+    <PackageLicenseExpression>GPL-3.0-or-later</PackageLicenseExpression>
     <TargetFramework>net9.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>

@@ -3,6 +3,13 @@ Sins of Slop Editor {VERSION}
 
 A mod editor for Sins of a Solar Empire: Rebellion.
 
+BUILT ENTIRELY BY AI
+Every line of code and all graphics of this editor were created by Claude (Anthropic). No code was
+written by hand. Tobias Liebhart / lt-design directed and tested it.
+
+Manual: https://tobiwahnkenobi.github.io/SinsOfSlopEditor/
+Source: https://github.com/TobiWahnKenobi/SinsOfSlopEditor
+
 REQUIREMENTS
 - Windows 10 or 11, 64-bit. Nothing else needs to be installed.
 - Sins of a Solar Empire: Rebellion. The editor uses the game's own ConvertData_Rebellion.exe
@@ -21,3 +28,11 @@ WHAT THE EDITOR WRITES
 - Converted game files (cache, can be deleted at any time): %LocalAppData%\SinsEditor\cache
 
 Back up your mod before large changes, e.g. "Fix all" on the dashboard.
+
+LICENCES
+- The editor: GNU General Public License v3.0 (LICENSE). The source code is at the address above.
+- Logos and icons: all rights reserved (LICENSE-ASSETS.md).
+- Third-party libraries packed into SinsOfSlopEditor.exe, all MIT: THIRD-PARTY-NOTICES.md and the
+  licenses folder.
+Sins of a Solar Empire is a trademark of Stardock Entertainment and Ironclad Games. This editor isn't
+affiliated with or endorsed by them and contains none of the game's files.

@@ -1,0 +1,29 @@
+title: Sins of Slop Editor
+description: Manual of the AI-built mod editor for Sins of a Solar Empire Rebellion
+remote_theme: just-the-docs/just-the-docs@v0.10.1
+plugins:
+  - jekyll-remote-theme
+url: https://tobiwahnkenobi.github.io
+baseurl: /SinsOfSlopEditor
+logo: /images/logo.png
+search_enabled: true
+color_scheme: dark
+aux_links:
+  "Download": https://github.com/TobiWahnKenobi/SinsOfSlopEditor/releases/latest
+  "Source on GitHub": https://github.com/TobiWahnKenobi/SinsOfSlopEditor
+aux_links_new_tab: true
+callouts:
+  ai:
+    title: Built entirely by AI
+    color: purple
+  note:
+    title: Note
+    color: blue
+  warning:
+    title: Careful
+    color: yellow
+footer_content: >-
+  Sins of Slop Editor © 2026 Tobias Liebhart / lt-design · code under GPL-3.0, logos all rights reserved ·
+  built entirely by AI (Claude) · <i>Sins of a Solar Empire</i> is a trademark of Stardock Entertainment and Ironclad Games.
+exclude:
+  - PLAN.md
