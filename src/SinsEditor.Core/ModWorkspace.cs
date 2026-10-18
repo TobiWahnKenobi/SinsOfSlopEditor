@@ -112,6 +112,14 @@ public sealed class ModWorkspace
         Changed?.Invoke();
     }
 
+    /// <summary>After a string was written to the mod's string file: the index uses the new table, problems follow.</summary>
+    public void ReplaceStrings(Index.StringTable table)
+    {
+        Index.ReplaceStrings(table);
+        RecomputeProblems();
+        Changed?.Invoke();
+    }
+
     private void RecomputeProblems()
     {
         _problems = Index.Problems.Concat(_brushProblems).Concat(_checks.Problems).ToList();

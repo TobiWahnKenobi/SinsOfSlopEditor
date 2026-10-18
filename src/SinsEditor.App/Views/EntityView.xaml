@@ -204,8 +204,22 @@
                             <TextBlock Text="{Binding ValueDescription}" Style="{StaticResource Muted}" FontSize="12" Margin="2,1,0,0"
                                        TextTrimming="CharacterEllipsis"
                                        Visibility="{Binding ValueDescription, Converter={StaticResource NullToCollapsed}}" />
-                            <TextBlock Text="{Binding Error}" Foreground="{StaticResource ErrorBrush}" FontSize="12" Margin="2,1,0,0"
-                                       Visibility="{Binding Error, Converter={StaticResource NullToCollapsed}}" />
+                            <DockPanel Margin="0,3,0,0" Visibility="{Binding ShowStringText, Converter={StaticResource BoolToVisibility}}">
+                                <TextBlock DockPanel.Dock="Left" Text="Text" Style="{StaticResource Muted}" FontSize="12" Width="36" VerticalAlignment="Center" Margin="2,0,0,0" />
+                                <TextBox Text="{Binding StringText, UpdateSourceTrigger=LostFocus}" Style="{StaticResource EditorBox}"
+                                         ToolTip="The string's text. Written to the mod's string file when you leave the box (a new string is added to it)." />
+                            </DockPanel>
+                            <DockPanel Margin="0,1,0,0">
+                                <Button DockPanel.Dock="Right" Content="+ New string" Padding="8,2" Margin="6,0,0,0" VerticalAlignment="Top"
+                                        Command="{Binding NewStringCommand}" ToolTip="Add this ID to the mod's string file with a text you enter"
+                                        Visibility="{Binding CanCreateString, Converter={StaticResource BoolToVisibility}}" />
+                                <StackPanel>
+                                    <TextBlock Text="{Binding Error}" Foreground="{StaticResource ErrorBrush}" FontSize="12" Margin="2,1,0,0"
+                                               Visibility="{Binding Error, Converter={StaticResource NullToCollapsed}}" />
+                                    <TextBlock Text="{Binding StringError}" Foreground="{StaticResource ErrorBrush}" FontSize="12" Margin="2,1,0,0" TextWrapping="Wrap"
+                                               Visibility="{Binding StringError, Converter={StaticResource NullToCollapsed}}" />
+                                </StackPanel>
+                            </DockPanel>
                         </StackPanel>
                         <ContentPresenter Grid.Column="2" Content="{Binding}" ContentTemplate="{StaticResource ItemActions}" VerticalAlignment="Top" />
                     </Grid>

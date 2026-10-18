@@ -101,6 +101,8 @@ public sealed partial class EntityViewModel : PageViewModel
         Session = workspace.SessionFor(entity);
         Editor = new PropertyEditorViewModel(workspace, Session, CandidateProvider.For(workspace), navigate);
         Session.Changed += OnSessionChanged;
+        // A string edited here changes the name, the connected strings and the missing-string problems.
+        Editor.StringsChanged += LoadInfo;
         LoadInfo();
     }
 
@@ -180,6 +182,7 @@ public sealed partial class EntityViewModel : PageViewModel
     public override void Detach()
     {
         Session.Changed -= OnSessionChanged;
+        Editor.StringsChanged -= LoadInfo;
         Editor.Detach();
     }
 

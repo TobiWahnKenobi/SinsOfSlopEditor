@@ -61,6 +61,34 @@ public sealed class ModIndex
     public LayerStack Stack { get; }
     public string Language { get; }
     public StringTable Strings { get; private set; }
+
+    /// <summary>
+    /// After a string was edited: the table as now written. String references are resolved against it again, and missing
+    /// strings that exist now are no longer reported.
+    /// </summary>
+    public void ReplaceStrings(StringTable table)
+    {
+        Strings = table;
+        var resolvedNow = new HashSet<(string File, int Line)>();
+        for (int i = 0; i < _references.Count; i++)
+        {
+            var r = _references[i];
+            if (r.Kind != ReferenceKind.String || r.Resolved || !Strings.Contains(r.Target)) continue;
+            var resolved = r with { Resolved = true };
+            _references[i] = resolved;
+            Swap(_outgoing.GetValueOrDefault(r.Source), r, resolved);
+            Swap(_incoming.GetValueOrDefault((r.Kind, r.Target)), r, resolved);
+            resolvedNow.Add((r.Source.File.RelativePath.ToLowerInvariant(), r.LineIndex));
+        }
+        _problems.RemoveAll(p => p.Code == ProblemCodes.MissingString && p.RelativePath != null && p.LineIndex is { } line
+            && resolvedNow.Contains((p.RelativePath.ToLowerInvariant(), line)));
+
+        static void Swap(List<Reference>? list, Reference old, Reference replacement)
+        {
+            int at = list?.IndexOf(old) ?? -1;
+            if (at >= 0) list![at] = replacement;
+        }
+    }
     public NamedEntryCatalog Brushes { get; } = new();
     public NamedEntryCatalog Sounds { get; } = new();
 

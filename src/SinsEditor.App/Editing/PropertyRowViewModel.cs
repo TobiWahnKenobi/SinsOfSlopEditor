@@ -87,8 +87,56 @@ public sealed partial class PropertyRowViewModel : ObservableObject
     public bool CanEditBrush => Kind == RowKind.Reference && Hint?.Reference == ReferenceKind.Brush && Error is null && Value.Length > 0;
     public bool CanView => Kind == RowKind.Reference && Hint?.Reference is ReferenceKind.Mesh or ReferenceKind.Texture && Error is null && Value.Length > 0;
 
-    /// <summary>What a reference's value means, e.g. the display name of an entity or the text of a string.</summary>
-    public string? ValueDescription => Kind == RowKind.Reference ? _owner.Describe(Hint!.Reference!.Value, Value) : null;
+    /// <summary>What a reference's value means, e.g. the display name of an entity (strings show their text in a box instead).</summary>
+    public string? ValueDescription => Kind == RowKind.Reference && !IsStringReference ? _owner.Describe(Hint!.Reference!.Value, Value) : null;
+
+    // ---- String references: the string's text is edited right here, and a missing string can be created ----
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowStringText), nameof(CanCreateString))]
+    private bool _isCreatingString;
+
+    [ObservableProperty]
+    private string? _stringError;
+
+    private string _newStringText = "";
+
+    public bool IsStringReference => Kind == RowKind.Reference && Hint?.Reference == ReferenceKind.String;
+    public bool HasString => IsStringReference && Value.Length > 0 && _owner.Exists(ReferenceKind.String, Value);
+    public bool ShowStringText => HasString || IsCreatingString;
+    public bool CanCreateString => IsStringReference && Value.Trim().Length > 0 && !Value.Contains('"') && !HasString && !IsCreatingString;
+
+    /// <summary>The referenced string's text; setting it writes the mod's string file (adding the string if it's new).</summary>
+    public string StringText
+    {
+        get => HasString ? _owner.StringText(Value) : _newStringText;
+        set
+        {
+            if (HasString && value == _owner.StringText(Value)) return;
+            if (!HasString)
+            {
+                _newStringText = value;
+                // An empty new string isn't created yet.
+                if (value.Length == 0) return;
+            }
+            StringError = _owner.SetString(Value.Trim(), value);
+            if (StringError is null)
+            {
+                IsCreatingString = false;
+                _newStringText = "";
+            }
+            OnPropertyChanged();
+        }
+    }
+
+    [RelayCommand]
+    private void NewString()
+    {
+        _newStringText = "";
+        StringError = null;
+        IsCreatingString = true;
+        OnPropertyChanged(nameof(StringText));
+    }
 
     /// <summary>The value as edited: strings without quotes, everything else as written.</summary>
     public string Value
@@ -121,6 +169,15 @@ public sealed partial class PropertyRowViewModel : ObservableObject
         OnPropertyChanged(nameof(CanGoTo));
         OnPropertyChanged(nameof(CanEditBrush));
         OnPropertyChanged(nameof(CanView));
+        if (IsStringReference) NotifyString();
+    }
+
+    private void NotifyString()
+    {
+        OnPropertyChanged(nameof(HasString));
+        OnPropertyChanged(nameof(ShowStringText));
+        OnPropertyChanged(nameof(CanCreateString));
+        OnPropertyChanged(nameof(StringText));
     }
 
     private void Commit()
@@ -137,6 +194,12 @@ public sealed partial class PropertyRowViewModel : ObservableObject
         _owner.Session.SetValue(LineIndex, raw);
         OnPropertyChanged(nameof(ValueDescription));
         OnPropertyChanged(nameof(CanGoTo));
+        if (IsStringReference)
+        {
+            IsCreatingString = false;
+            StringError = null;
+            NotifyString();
+        }
     }
 
     private string? Validate(string value) => Kind switch

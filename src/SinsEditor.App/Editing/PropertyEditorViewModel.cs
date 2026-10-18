@@ -125,7 +125,8 @@ public sealed partial class PropertyEditorViewModel : ObservableObject
         FilterText.Length == 0
         || row.Key.Contains(FilterText, StringComparison.OrdinalIgnoreCase)
         || row.Value.Contains(FilterText, StringComparison.OrdinalIgnoreCase)
-        || (row.ValueDescription?.Contains(FilterText, StringComparison.CurrentCultureIgnoreCase) ?? false);
+        || (row.ValueDescription?.Contains(FilterText, StringComparison.CurrentCultureIgnoreCase) ?? false)
+        || (row.HasString && row.StringText.Contains(FilterText, StringComparison.CurrentCultureIgnoreCase));
 
     // ---- Services for rows ----
 
@@ -142,6 +143,28 @@ public sealed partial class PropertyEditorViewModel : ObservableObject
     };
 
     public void Navigate(NavTarget target) => _navigate(target);
+
+    public string StringText(string id) => _workspace.Index.Strings.Get(id) ?? "";
+
+    /// <summary>Writes a string's text to the mod's string file; null if that worked, otherwise why not.</summary>
+    public string? SetString(string id, string text)
+    {
+        try
+        {
+            StringEdits.SetString(_workspace, id, text);
+        }
+        catch (Exception e) when (e is ArgumentException or InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            return e.Message;
+        }
+        // Other rows may show the same string, and a new string resolves their errors.
+        foreach (var row in Rows) row.Reload();
+        StringsChanged?.Invoke();
+        return null;
+    }
+
+    /// <summary>Raised after a string was written to the string file.</summary>
+    public event Action? StringsChanged;
 
     /// <summary>
     /// Item key for an empty list: taken from another list in the same entity whose counter has the same key
