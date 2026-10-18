@@ -14,9 +14,9 @@ A mod editor for *Sins of a Solar Empire: Rebellion*.
 
 {: .ai }
 > **This editor is completely AI-built.** Every line of code, every test, the build scripts, this manual and all
-> graphics – the logo and the icon – were created by **Claude**, Anthropic's AI. **No code was written by hand.**
-> Tobias Liebhart / lt-design decided what to build, tried it on real mods and reported what didn't work; Claude wrote
-> and changed everything. Hence the name: it's AI "slop" – tested and useful, but keep that in mind.
+> graphics – the logo and the icon – were created by **Claude**, Anthropic's AI. **I didn't write any of the code by
+> hand.** I decided what to build, tried it on my own mods and reported what didn't work; Claude wrote and changed
+> everything. Hence the name: it's AI "slop" – tested and useful, but keep that in mind.
 > [More about how it was made](about.html).
 
 ![The dashboard of a mod](images/dashboard.png)

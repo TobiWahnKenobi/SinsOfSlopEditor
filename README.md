@@ -4,10 +4,9 @@
 
 > [!IMPORTANT]
 > **This project is built entirely by AI.** Every line of code, every test, the build scripts, this README, the
-> manual and all graphics (logo, icon) were created by **Claude (Anthropic)**. No code was written by hand. A human –
-> Tobias Liebhart / lt-design – decided what to build, tested it with real mods and reported what was wrong; Claude
-> wrote and changed everything. The name says as much: it's AI "slop" – useful, tested, but read the code with that in
-> mind.
+> manual and all graphics (logo, icon) were created by **Claude (Anthropic)**. I didn't write a single line of code by
+> hand. I decided what to build, tested it on my own mods and reported what was wrong; Claude wrote and changed
+> everything. The name says as much: it's AI "slop" – useful and tested, but read the code with that in mind.
 
 A mod editor for **Sins of a Solar Empire: Rebellion** (Windows). It opens a mod on top of the game and any base mods,
 and lets you browse, edit, check and preview everything in it – entities, strings, research trees, brushes, textures
