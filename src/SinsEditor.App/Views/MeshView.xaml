@@ -251,7 +251,7 @@
             <viewer:GameMeshView Scene="{Binding GameScene}" ShowPoints="{Binding ShowPoints}" ShowWireframe="{Binding ShowWireframe}"
                                  ShowParticles="{Binding ShowParticles}" ParticleTime="{Binding ParticleTime}" IsPlaying="{Binding IsPlaying}"
                                  PlaybackSpeed="{Binding PlaybackSpeed}" ParticleDuration="{Binding ParticleDuration}" Capture="{Binding Capture}"
-                                 Camera="{Binding Camera}" />
+                                 Camera="{Binding Camera}" LightDirection="{Binding LightDirection}" />
 
             <!-- View palette: slides in from the right. -->
             <ToggleButton HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,8,8,0" Padding="8,4" Panel.ZIndex="2"
@@ -329,6 +329,19 @@
                             <ComboBox ItemsSource="{Binding AxisNames}" SelectedItem="{Binding MoveAxis}" Width="70" />
                             <Button Content="−" Command="{Binding MoveCommand}" CommandParameter="-" Margin="6,0,2,0" MinWidth="32" />
                             <Button Content="+" Command="{Binding MoveCommand}" CommandParameter="+" MinWidth="32" />
+                        </StackPanel>
+
+                        <TextBlock Text="Sun" Style="{StaticResource Muted}" Margin="0,0,0,2" />
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                            <TextBox Text="{Binding SunDegrees, UpdateSourceTrigger=PropertyChanged, Delay=300}" Width="52" />
+                            <TextBlock Text="° around" VerticalAlignment="Center" Margin="4,0,4,0" />
+                            <ComboBox ItemsSource="{Binding AxisNames}" SelectedItem="{Binding SunAxis}" Width="70" />
+                            <Button Content="−" Command="{Binding RotateSunCommand}" CommandParameter="-" Margin="6,0,2,0" MinWidth="32" />
+                            <Button Content="+" Command="{Binding RotateSunCommand}" CommandParameter="+" MinWidth="32" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <Button Content="Reset sun" Command="{Binding ResetSunCommand}" Margin="0,0,4,0" />
+                            <Button Content="From the camera" Command="{Binding SunFromCameraCommand}" ToolTip="Light the side you're looking at" />
                         </StackPanel>
 
                         <TextBlock Text="Stored views" Style="{StaticResource SectionHeader}" Margin="0,0,0,4" />

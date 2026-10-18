@@ -225,6 +225,16 @@ public sealed partial class MeshViewModel : PageViewModel
     [ObservableProperty]
     private string _newViewName = "";
 
+    /// <summary>Direction from the model to the sun (the light).</summary>
+    [ObservableProperty]
+    private System.Numerics.Vector3 _lightDirection = GameRenderOptions.DefaultLightDirection;
+
+    [ObservableProperty]
+    private double _sunDegrees = 15;
+
+    [ObservableProperty]
+    private string _sunAxis = "Y";
+
     public IReadOnlyList<string> AxisNames { get; } = ["X", "Y", "Z"];
     public System.Collections.ObjectModel.ObservableCollection<SavedMeshView> SavedViews { get; } = [];
     public bool HasNoSavedViews => SavedViews.Count == 0;
@@ -281,6 +291,25 @@ public sealed partial class MeshViewModel : PageViewModel
         if (Camera is { } c) Camera = c.Moved(AxisVector(MoveAxis) * (float)MoveUnits * (sign == "-" ? -1 : 1));
     }
 
+    /// <summary>Turns the sun around the model, around the chosen world axis; the parameter is the direction (+/-).</summary>
+    [RelayCommand]
+    private void RotateSun(string? sign)
+    {
+        float angle = (float)SunDegrees * (sign == "-" ? -1 : 1) * MathF.PI / 180;
+        LightDirection = System.Numerics.Vector3.Normalize(System.Numerics.Vector3.Transform(LightDirection,
+            System.Numerics.Quaternion.CreateFromAxisAngle(AxisVector(SunAxis), angle)));
+    }
+
+    [RelayCommand]
+    private void ResetSun() => LightDirection = GameRenderOptions.DefaultLightDirection;
+
+    /// <summary>The sun behind the camera, so the side facing the viewer is lit.</summary>
+    [RelayCommand]
+    private void SunFromCamera()
+    {
+        if (Camera is { } c) LightDirection = System.Numerics.Vector3.Normalize(c.Direction + new System.Numerics.Vector3(0, 0.3f, 0));
+    }
+
     private void LoadSavedViews()
     {
         SavedViews.Clear();
@@ -306,7 +335,7 @@ public sealed partial class MeshViewModel : PageViewModel
         var view = new SavedMeshView
         {
             Name = name, Target = [c.Target.X, c.Target.Y, c.Target.Z], Yaw = c.Yaw, Pitch = c.Pitch, Distance = c.Distance,
-            FieldOfView = c.FieldOfView, Time = ParticleTime,
+            FieldOfView = c.FieldOfView, Time = ParticleTime, Light = [LightDirection.X, LightDirection.Y, LightDirection.Z],
         };
         int existing = SavedViews.ToList().FindIndex(v => v.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
         if (existing >= 0) SavedViews[existing] = view;
@@ -323,6 +352,7 @@ public sealed partial class MeshViewModel : PageViewModel
         var target = view.Target is { Length: 3 } t ? new System.Numerics.Vector3(t[0], t[1], t[2]) : System.Numerics.Vector3.Zero;
         Camera = new SinsEditor.Viewer.OrbitCamera(target, view.Yaw, view.Pitch, view.Distance, view.FieldOfView);
         ParticleTime = Math.Clamp(view.Time, 0, ParticleDuration);
+        if (view.Light is { Length: 3 } l) LightDirection = new System.Numerics.Vector3(l[0], l[1], l[2]);
     }
 
     [RelayCommand]

@@ -21,6 +21,8 @@ public sealed class SavedMeshView
     public float Distance { get; set; }
     public float FieldOfView { get; set; } = 45;
     public double Time { get; set; }
+    /// <summary>Direction to the sun, if it was moved.</summary>
+    public float[]? Light { get; set; }
 }
 
 /// <summary>Editor-wide settings in <c>%AppData%\SinsEditor\settings.json</c>.</summary>

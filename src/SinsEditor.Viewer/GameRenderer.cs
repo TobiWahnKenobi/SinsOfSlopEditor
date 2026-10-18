@@ -16,10 +16,15 @@ namespace SinsEditor.Viewer;
 /// <summary>Display options of the game-shader view.</summary>
 /// <summary>
 /// Display options of the game-shader view. <paramref name="Transparent"/> renders without skybox or background and gives
-/// the picture an alpha channel (mesh coverage, particle brightness), for exporting images.
+/// the picture an alpha channel (mesh coverage, particle brightness), for exporting images. <paramref name="LightDirection"/>
+/// points from the model to the sun (null: <see cref="DefaultLightDirection"/>).
 /// </summary>
 public sealed record GameRenderOptions(bool ShowPoints, bool Wireframe, bool ShowParticles = true, bool Transparent = false,
-    PixelImage? Background = null, float Time = 0);
+    PixelImage? Background = null, float Time = 0, Vector3? LightDirection = null)
+{
+    /// <summary>Above, in front and to the left of the ship.</summary>
+    public static Vector3 DefaultLightDirection { get; } = Vector3.Normalize(new Vector3(-0.6f, 0.9f, 0.8f));
+}
 
 /// <summary>
 /// Draws a <see cref="GameScene"/> with the game's own shaders on Direct3D 11, offscreen, and returns the picture as BGRA
@@ -607,7 +612,7 @@ public sealed class GameRenderer : IDisposable
         var center = primary is null ? Vector3.Zero : (primary.MinExtents + primary.MaxExtents) / 2;
 
         // The light: above, in front and to the left of the ship, fixed in the world so turning the model shows its shading.
-        var lightDirection = Vector3.Normalize(new Vector3(-0.6f, 0.9f, 0.8f));
+        var lightDirection = options.LightDirection is { } chosen && chosen.LengthSquared() > 1e-8f ? Vector3.Normalize(chosen) : GameRenderOptions.DefaultLightDirection;
         var lightPosition = center + lightDirection * Math.Max(radius * 50, scene?.StarDistance ?? 100_000f);
         var lightView = LookAtLH(center + lightDirection * radius * 3, center, Math.Abs(lightDirection.Y) > 0.99f ? Vector3.UnitZ : Vector3.UnitY);
         var lightProjection = OrthoLH(radius * 2.2f, radius * 2.2f, 0, radius * 6);
