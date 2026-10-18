@@ -36,6 +36,7 @@ public static class ProblemCodes
     public const string ManifestCountMismatch = "manifest-count-mismatch";
     public const string DuplicateManifestEntry = "duplicate-manifest-entry";
     public const string UnusedEntity = "unused-entity";
+    public const string AiReadiness = "ai-readiness";
 
     /// <summary>Short title for a group of problems on the dashboard.</summary>
     public static string Title(string code) => code switch
@@ -59,6 +60,7 @@ public static class ProblemCodes
         ManifestCountMismatch => "Manifest count mismatch",
         DuplicateManifestEntry => "Manifest entry listed twice",
         UnusedEntity => "Unused entity",
+        AiReadiness => "AI can't play a race fully",
         _ => code,
     };
 }

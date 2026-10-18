@@ -252,7 +252,12 @@ The schema says what each field means, which is what turns raw text into forms, 
     atmosphere halo on engine-built geometry, neither drawn yet. Depth range is fitted around the model.
 - Texture pages show the image (fitted or 1:1, checkerboard behind alpha) and the brushes and entities using it.
 
-### Mesh viewer: next round (planned, not started)
+### Mesh viewer: next round (done)
+
+Particles start at their StartTime (no random phase); blink lights verified by a test. The camera is a two-way property kept
+by the page, so a tab keeps camera, time and settings. FOV slider and a view palette sliding in from the right (reset,
+top-down, front, side, back; rotate around X/Y/Z through the target; move along X/Y/Z; stored views by name per mesh in the
+editor settings). Playback runs up to 120 s. Original plan:
 
 1. **Particle start:** effects now start with a random emission phase per hardpoint (the first particle of an emitter
    comes at a random moment within its first emit interval), so copies on different hardpoints don't blink in step.
@@ -276,7 +281,14 @@ The schema says what each field means, which is what turns raw text into forms, 
    - **stored views:** save the current camera position/rotation, FOV, playback time (and playing state) under a name;
      a list to restore one; delete entries. Stored views are per editor (editor settings, by mesh name), not in the mod.
 
-### Further features (planned, not started)
+### Further features (done)
+
+Strings are edited in place (written to the mod's string file at once, outside the entity's undo); + New string adds a
+missing ID. A free cell in the research tree offers "New subject here" (copy of the nearest subject, strings copied, tier
+= column, no prerequisites; the mod reloads). AI readiness warnings (code ai-readiness) check selectable races for colony,
+scout, constructor and combat frigates, frigate/capital factories, extractors, labs and a capital ship, and the research
+to colonise Ice, Volcanic, Greenhouse, Iron and Oceanic planets; the base game passes. The editor logo and icon are in.
+Original plan:
 
 1. **Strings edited where they're used:** every string reference in an entity (name, description, ability text …) shows
    the string's text next to its ID and can be edited in place; saving writes the string file (the edited mod's copy,
