@@ -487,3 +487,6 @@ testpaths.local.json
 
 # Packaged builds (build/publish.ps1)
 dist/
+
+# Source artwork for the logo and icon (the used exports are in src/SinsEditor.App/Assets)
+SinsOfSlopEditor_Icons/

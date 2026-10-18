@@ -2,15 +2,18 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="clr-namespace:SinsEditor.App.ViewModels"
-        Title="{DynamicResource AppTitle}" Width="640" SizeToContent="Height" ResizeMode="NoResize"
+        Icon="/Assets/App.ico" Title="{DynamicResource AppTitle}" Width="640" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner">
     <StackPanel Margin="24">
         <DockPanel Margin="0,0,0,20">
-            <Image DockPanel.Dock="Left" Source="{DynamicResource Logo}" Height="72" Margin="0,0,16,0" RenderOptions.BitmapScalingMode="HighQuality" />
+            <Image DockPanel.Dock="Left" Source="{DynamicResource EditorLogo}" Height="72" Margin="0,0,16,0" RenderOptions.BitmapScalingMode="HighQuality" />
             <StackPanel VerticalAlignment="Center">
                 <TextBlock Text="{DynamicResource AppTitle}" FontSize="22" FontWeight="SemiBold" />
                 <TextBlock Text="Mod editor for Sins of a Solar Empire: Rebellion" Style="{StaticResource Muted}" />
-                <TextBlock Text="{DynamicResource CopyrightText}" Style="{StaticResource Muted}" FontSize="12" Margin="0,4,0,0" />
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <Image Source="{DynamicResource CompanyLogo}" Height="20" Margin="0,0,6,0" RenderOptions.BitmapScalingMode="HighQuality" />
+                    <TextBlock Text="{DynamicResource CopyrightText}" Style="{StaticResource Muted}" FontSize="12" VerticalAlignment="Center" />
+                </StackPanel>
             </StackPanel>
         </DockPanel>
         <TextBlock Text="Game folder" FontWeight="SemiBold" Margin="0,0,0,4" />

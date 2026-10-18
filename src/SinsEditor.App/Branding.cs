@@ -5,8 +5,9 @@ using Microsoft.Win32;
 namespace SinsEditor.App;
 
 /// <summary>
-/// Title, logo and copyright line. Puts <c>AppTitle</c>, <c>Logo</c> (an image for the current light/dark theme) and <c>CopyrightText</c>
-/// into the application resources, and swaps the logo when Windows switches between light and dark.
+/// Title, logos and copyright line. Puts <c>AppTitle</c>, <c>EditorLogo</c> (the editor's own logo), <c>CompanyLogo</c>
+/// (the LT Design logo for the current light/dark theme, shown small with the copyright) and <c>CopyrightText</c> into the
+/// application resources, and swaps the company logo when Windows switches between light and dark.
 /// </summary>
 public static class Branding
 {
@@ -19,6 +20,7 @@ public static class Branding
     {
         app.Resources["AppTitle"] = AppTitle;
         app.Resources["CopyrightText"] = CopyrightText;
+        app.Resources["EditorLogo"] = Image("EditorLogo.png");
         UpdateLogo(app);
         SystemEvents.UserPreferenceChanged += (_, e) =>
         {
@@ -31,9 +33,10 @@ public static class Branding
     public static bool IsDarkTheme =>
         Registry.GetValue(@"HKEY_CURRENT_USER\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme", 1) is 0;
 
-    private static void UpdateLogo(Application app)
+    private static void UpdateLogo(Application app) => app.Resources["CompanyLogo"] = Image(IsDarkTheme ? "Logo-White.png" : "Logo.png");
+
+    private static BitmapImage Image(string file)
     {
-        string file = IsDarkTheme ? "Logo-White.png" : "Logo.png";
         var logo = new BitmapImage();
         logo.BeginInit();
         // Resources are addressed by assembly name (SinsOfSlopEditor), so read it instead of hard-coding it.
@@ -42,6 +45,6 @@ public static class Branding
         logo.CacheOption = BitmapCacheOption.OnLoad;
         logo.EndInit();
         logo.Freeze();
-        app.Resources["Logo"] = logo;
+        return logo;
     }
 }

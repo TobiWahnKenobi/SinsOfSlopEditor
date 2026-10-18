@@ -11,7 +11,10 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Logo for light backgrounds (black lines) and dark backgrounds (white lines). -->
+    <!-- The editor's logo and icon. -->
+    <Resource Include="Assets\EditorLogo.png" />
+    <Resource Include="Assets\App.ico" />
+    <!-- LT Design logo for light backgrounds (black lines) and dark backgrounds (white lines). -->
     <Resource Include="Assets\Logo.png" />
     <Resource Include="Assets\Logo-White.png" />
   </ItemGroup>
@@ -19,6 +22,7 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <AssemblyName>SinsOfSlopEditor</AssemblyName>
+    <ApplicationIcon>Assets\App.ico</ApplicationIcon>
     <RootNamespace>SinsEditor.App</RootNamespace>
     <Product>Sins of Slop Editor</Product>
     <Version>0.2.0</Version>
