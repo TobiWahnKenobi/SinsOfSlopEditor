@@ -225,9 +225,64 @@ public sealed partial class MeshViewModel : PageViewModel
     [ObservableProperty]
     private string _newViewName = "";
 
-    /// <summary>Direction from the model to the sun (the light).</summary>
+    /// <summary>
+    /// Where the sun starts (default, from the camera, or a stored view) before it's turned by <see cref="SunAngleX"/>,
+    /// <see cref="SunAngleY"/> and <see cref="SunAngleZ"/> (degrees around the world axes, in that order).
+    /// </summary>
+    private System.Numerics.Vector3 _lightBase = GameRenderOptions.DefaultLightDirection;
+
     [ObservableProperty]
-    private System.Numerics.Vector3 _lightDirection = GameRenderOptions.DefaultLightDirection;
+    [NotifyPropertyChangedFor(nameof(LightDirection))]
+    private double _sunAngleX;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LightDirection))]
+    private double _sunAngleY;
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(LightDirection))]
+    private double _sunAngleZ;
+
+    /// <summary>Direction from the model to the sun (the light).</summary>
+    public System.Numerics.Vector3 LightDirection
+    {
+        get
+        {
+            static System.Numerics.Quaternion Q(System.Numerics.Vector3 axis, double degrees) =>
+                System.Numerics.Quaternion.CreateFromAxisAngle(axis, (float)(degrees * Math.PI / 180));
+            var rotation = System.Numerics.Quaternion.Concatenate(System.Numerics.Quaternion.Concatenate(
+                Q(System.Numerics.Vector3.UnitX, SunAngleX), Q(System.Numerics.Vector3.UnitY, SunAngleY)), Q(System.Numerics.Vector3.UnitZ, SunAngleZ));
+            return System.Numerics.Vector3.Normalize(System.Numerics.Vector3.Transform(_lightBase, rotation));
+        }
+    }
+
+    /// <summary>A new starting direction for the sun, with its turns back at zero.</summary>
+    private void SetSunBase(System.Numerics.Vector3 direction)
+    {
+        _lightBase = System.Numerics.Vector3.Normalize(direction);
+        SunAngleX = SunAngleY = SunAngleZ = 0;
+        OnPropertyChanged(nameof(LightDirection));
+    }
+
+    private static double Wrap(double degrees) => degrees - 360 * Math.Floor((degrees + 180) / 360);
+
+    /// <summary>Camera turn around the target (degrees, -180..180); the slider beside the rotate buttons.</summary>
+    public double CameraYaw
+    {
+        get => Camera is { } c ? Wrap(c.Yaw * 180 / Math.PI) : 0;
+        set { if (Camera is { } c) Camera = c with { Yaw = (float)(Wrap(value) * Math.PI / 180) }; }
+    }
+
+    /// <summary>Camera height angle (degrees, from below to above).</summary>
+    public double CameraPitch
+    {
+        get => Camera is { } c ? c.Pitch * 180 / Math.PI : 0;
+        set
+        {
+            float max = SinsEditor.Viewer.OrbitCamera.MaxPitch;
+            if (Camera is { } c) Camera = c with { Pitch = Math.Clamp((float)(value * Math.PI / 180), -max, max) };
+        }
+    }
 
     [ObservableProperty]
     private double _sunDegrees = 15;
@@ -248,6 +303,8 @@ public sealed partial class MeshViewModel : PageViewModel
     partial void OnCameraChanged(SinsEditor.Viewer.OrbitCamera? value)
     {
         if (value is { } c && Math.Abs(c.FieldOfView - FieldOfView) > 0.01) FieldOfView = c.FieldOfView;
+        OnPropertyChanged(nameof(CameraYaw));
+        OnPropertyChanged(nameof(CameraPitch));
     }
 
     private static System.Numerics.Vector3 AxisVector(string axis) => axis switch
@@ -295,19 +352,23 @@ public sealed partial class MeshViewModel : PageViewModel
     [RelayCommand]
     private void RotateSun(string? sign)
     {
-        float angle = (float)SunDegrees * (sign == "-" ? -1 : 1) * MathF.PI / 180;
-        LightDirection = System.Numerics.Vector3.Normalize(System.Numerics.Vector3.Transform(LightDirection,
-            System.Numerics.Quaternion.CreateFromAxisAngle(AxisVector(SunAxis), angle)));
+        double step = SunDegrees * (sign == "-" ? -1 : 1);
+        switch (SunAxis)
+        {
+            case "X": SunAngleX = Wrap(SunAngleX + step); break;
+            case "Y": SunAngleY = Wrap(SunAngleY + step); break;
+            default: SunAngleZ = Wrap(SunAngleZ + step); break;
+        }
     }
 
     [RelayCommand]
-    private void ResetSun() => LightDirection = GameRenderOptions.DefaultLightDirection;
+    private void ResetSun() => SetSunBase(GameRenderOptions.DefaultLightDirection);
 
     /// <summary>The sun behind the camera, so the side facing the viewer is lit.</summary>
     [RelayCommand]
     private void SunFromCamera()
     {
-        if (Camera is { } c) LightDirection = System.Numerics.Vector3.Normalize(c.Direction + new System.Numerics.Vector3(0, 0.3f, 0));
+        if (Camera is { } c) SetSunBase(c.Direction + new System.Numerics.Vector3(0, 0.3f, 0));
     }
 
     // ---- Cel shading: the editor's own renderer for icon-like pictures, with named presets ----
@@ -481,7 +542,7 @@ public sealed partial class MeshViewModel : PageViewModel
         var target = view.Target is { Length: 3 } t ? new System.Numerics.Vector3(t[0], t[1], t[2]) : System.Numerics.Vector3.Zero;
         Camera = new SinsEditor.Viewer.OrbitCamera(target, view.Yaw, view.Pitch, view.Distance, view.FieldOfView);
         ParticleTime = Math.Clamp(view.Time, 0, ParticleDuration);
-        if (view.Light is { Length: 3 } l) LightDirection = new System.Numerics.Vector3(l[0], l[1], l[2]);
+        if (view.Light is { Length: 3 } l) SetSunBase(new System.Numerics.Vector3(l[0], l[1], l[2]));
     }
 
     [RelayCommand]

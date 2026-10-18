@@ -416,6 +416,18 @@
                             <Button Content="−" Command="{Binding RotateCommand}" CommandParameter="-" Margin="6,0,2,0" MinWidth="32" />
                             <Button Content="+" Command="{Binding RotateCommand}" CommandParameter="+" MinWidth="32" />
                         </StackPanel>
+                        <DockPanel Margin="0,0,0,2">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding CameraYaw, StringFormat={}{0:0}°}" Width="40" TextAlignment="Right" VerticalAlignment="Center" />
+                            <TextBlock DockPanel.Dock="Left" Text="Turn" Width="50" VerticalAlignment="Center" />
+                            <Slider Minimum="-180" Maximum="180" Value="{Binding CameraYaw}" SmallChange="1" LargeChange="15" VerticalAlignment="Center"
+                                    ToolTip="Around the model (Y axis)" />
+                        </DockPanel>
+                        <DockPanel Margin="0,0,0,8">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding CameraPitch, StringFormat={}{0:0}°}" Width="40" TextAlignment="Right" VerticalAlignment="Center" />
+                            <TextBlock DockPanel.Dock="Left" Text="Tilt" Width="50" VerticalAlignment="Center" />
+                            <Slider Minimum="-90" Maximum="90" Value="{Binding CameraPitch}" SmallChange="1" LargeChange="15" VerticalAlignment="Center"
+                                    ToolTip="From below (-90°) to straight above (90°)" />
+                        </DockPanel>
 
                         <TextBlock Text="Move" Style="{StaticResource Muted}" Margin="0,0,0,2" />
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
@@ -434,6 +446,24 @@
                             <Button Content="−" Command="{Binding RotateSunCommand}" CommandParameter="-" Margin="6,0,2,0" MinWidth="32" />
                             <Button Content="+" Command="{Binding RotateSunCommand}" CommandParameter="+" MinWidth="32" />
                         </StackPanel>
+                        <DockPanel Margin="0,0,0,2">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding SunAngleX, StringFormat={}{0:0}°}" Width="40" TextAlignment="Right" VerticalAlignment="Center" />
+                            <TextBlock DockPanel.Dock="Left" Text="Around X" Width="62" VerticalAlignment="Center" />
+                            <Slider Minimum="-180" Maximum="180" Value="{Binding SunAngleX}" SmallChange="1" LargeChange="15" VerticalAlignment="Center"
+                                    ToolTip="Tilts the sun towards the bow or the stern" />
+                        </DockPanel>
+                        <DockPanel Margin="0,0,0,2">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding SunAngleY, StringFormat={}{0:0}°}" Width="40" TextAlignment="Right" VerticalAlignment="Center" />
+                            <TextBlock DockPanel.Dock="Left" Text="Around Y" Width="62" VerticalAlignment="Center" />
+                            <Slider Minimum="-180" Maximum="180" Value="{Binding SunAngleY}" SmallChange="1" LargeChange="15" VerticalAlignment="Center"
+                                    ToolTip="Turns the sun around the model horizontally" />
+                        </DockPanel>
+                        <DockPanel Margin="0,0,0,4">
+                            <TextBlock DockPanel.Dock="Right" Text="{Binding SunAngleZ, StringFormat={}{0:0}°}" Width="40" TextAlignment="Right" VerticalAlignment="Center" />
+                            <TextBlock DockPanel.Dock="Left" Text="Around Z" Width="62" VerticalAlignment="Center" />
+                            <Slider Minimum="-180" Maximum="180" Value="{Binding SunAngleZ}" SmallChange="1" LargeChange="15" VerticalAlignment="Center"
+                                    ToolTip="Tilts the sun towards the left or right side" />
+                        </DockPanel>
                         <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                             <Button Content="Reset sun" Command="{Binding ResetSunCommand}" Margin="0,0,4,0" />
                             <Button Content="From the camera" Command="{Binding SunFromCameraCommand}" ToolTip="Light the side you're looking at" />
