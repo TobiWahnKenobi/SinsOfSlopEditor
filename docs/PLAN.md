@@ -276,6 +276,26 @@ The schema says what each field means, which is what turns raw text into forms, 
    - **stored views:** save the current camera position/rotation, FOV, playback time (and playing state) under a name;
      a list to restore one; delete entries. Stored views are per editor (editor settings, by mesh name), not in the mod.
 
+### Further features (planned, not started)
+
+1. **Strings edited where they're used:** every string reference in an entity (name, description, ability text …) shows
+   the string's text next to its ID and can be edited in place; saving writes the string file (the edited mod's copy,
+   created from the lower layer if needed, count updated). Typing an unknown string ID shows a **+ New** button: enter the
+   text and the string is added to the string file of the current language. Undo covers both files.
+2. **New research subject from the tree:** selecting an empty slot in the research tree editor offers "New subject here":
+   it creates the subject (from a template or by duplicating a chosen subject) with the slot's tier and position, adds it
+   to the race's research lists and the manifest, and opens it for editing.
+3. **AI readiness checks (warnings, not errors):** the Sins AI stalls if certain ships and research are missing or out of
+   reach. A check per playable race reports what the AI needs and can't get, on the dashboard and in the Problems view:
+   - which entities the AI looks for (by type and role), buildable from the start or reachable through research:
+     e.g. a colony ship, a constructor, a scout, a capital ship, the basic frigate roles, the structures it builds
+     (orbital, trade, research labs, defence), colonisation research for each planet type, logistics/tactical slot upgrades;
+   - reachability through prerequisites (no cycles, no subject behind a missing or unbuildable one, tier/lab counts
+     achievable);
+   - the exact list must be worked out first (from the game's entity fields the AI reads, e.g. roles and `aiUse…`
+     settings, plus known modding guidance), each rule with a short explanation of what the AI does without it.
+     Hard to get complete, so start with the well-known stalls and add rules as they're confirmed.
+
 ## Milestones
 
 | # | Milestone | Done when |
