@@ -48,4 +48,24 @@ public sealed class StringEditsTests : IAsyncLifetime
         Assert.Equal(before + 1, after.Index.Strings.TotalCount);
         Assert.Throws<ArgumentException>(() => StringEdits.SetString(after, id, "with \"quotes\""));
     }
+
+    [SkippableFact]
+    public async Task Scattered_variants_are_grouped_behind_their_first_entry()
+    {
+        Skip.If(TestPaths.GameDir is null, "Game directory not configured.");
+        Directory.CreateDirectory(Path.Combine(_mod, "String"));
+        string Block(string id, string value) => $"StringInfo\r\n\tID \"{id}\"\r\n\tValue \"{value}\"\r\n";
+        File.WriteAllText(Path.Combine(_mod, "String", "English.str"), "TXT\r\nNumStrings 6\r\n" + Block("IDS_TAUNT", "one") + Block("IDS_OTHER", "x")
+            + Block("IDS_TAUNT", "two") + Block("IDS_LAST", "y") + Block("IDS_TAUNT", "three") + Block("IDS_TAUNT", "four"));
+        var ws = await Open();
+        Assert.Equal(1, Core.Validation.StringFixes.CountScattered(ws.Index.Strings));
+
+        Assert.Equal(3, Core.Validation.StringFixes.GroupScattered(ws));
+        var after = await Open();
+        var ids = SinsDocument.Load(Path.Combine(_mod, "String", "English.str")).Lines.Where(l => l.Key is "ID" or "Value").Select(l => l.Value).ToList();
+        Assert.Equal(["\"IDS_TAUNT\"", "\"one\"", "\"IDS_TAUNT\"", "\"two\"", "\"IDS_TAUNT\"", "\"three\"", "\"IDS_TAUNT\"", "\"four\"",
+            "\"IDS_OTHER\"", "\"x\"", "\"IDS_LAST\"", "\"y\""], ids);
+        Assert.Equal(0, Core.Validation.StringFixes.CountScattered(after.Index.Strings));
+        Assert.Equal(6, after.Index.Strings.TotalCount);
+    }
 }

@@ -83,6 +83,77 @@ public static class StringFixes
         return added;
     }
 
+    /// <summary>How many IDs are defined in several places of the file with different text (e.g. taunt variants split up).</summary>
+    public static int CountScattered(StringTable table) => table.Duplicates.Count(d => d.Kind == DuplicateKind.Scattered);
+
+    /// <summary>
+    /// Moves the <c>StringInfo</c> blocks of IDs defined in several places right behind the first block of that ID, in
+    /// their order, so variants (like the game's taunts) are together again. Nothing is added or removed; the result is
+    /// written to the edited mod's string file. Returns how many blocks were moved.
+    /// </summary>
+    public static int GroupScattered(ModWorkspace workspace)
+    {
+        var table = workspace.Index.Strings;
+        var mod = workspace.Stack.EditedMod ?? throw new InvalidOperationException("No mod is open for editing.");
+        if (table.Document is null) return 0;
+
+        var doc = SinsDocument.Parse(table.Document.ToBytes());
+        var parents = doc.GetParentIndices();
+        (int Start, int End) BlockOf(StringEntry e)
+        {
+            int start = parents[e.IdLineIndex] >= 0 ? parents[e.IdLineIndex] : e.IdLineIndex;
+            return (start, CountedList.BlockEnd(doc, start));
+        }
+
+        // The blocks to move, and after which block (its end line) they go.
+        var moved = new HashSet<int>();
+        var appendAfter = new Dictionary<int, List<(int Start, int End)>>();
+        foreach (var group in table.Duplicates.Where(d => d.Kind == DuplicateKind.Scattered))
+        {
+            var first = BlockOf(group.Entries[0]);
+            var rest = group.Entries.Skip(1).Select(BlockOf).Where(b => b.Start != first.Start).ToList();
+            // Blocks already right behind the first one stay; the rest follow them.
+            int end = first.End;
+            var tail = new List<(int Start, int End)>();
+            foreach (var block in rest)
+            {
+                if (tail.Count == 0 && block.Start == end) { end = block.End; continue; }
+                tail.Add(block);
+                moved.Add(block.Start);
+            }
+            if (tail.Count > 0) appendAfter[end] = tail;
+        }
+        if (moved.Count == 0) return 0;
+
+        var result = new List<SinsLine>(doc.Lines.Count);
+        for (int i = 0; i < doc.Lines.Count;)
+        {
+            if (appendAfter.TryGetValue(i, out var blocksHere))
+            {
+                foreach (var (start, end) in blocksHere) result.AddRange(doc.Lines.GetRange(start, end - start));
+                appendAfter.Remove(i);
+            }
+            if (moved.Contains(i))
+            {
+                i = CountedList.BlockEnd(doc, i);
+                continue;
+            }
+            result.Add(doc.Lines[i]);
+            i++;
+        }
+        // A first block at the very end of the file.
+        foreach (var blocks in appendAfter.Values)
+            foreach (var (start, end) in blocks) result.AddRange(doc.Lines.GetRange(start, end - start));
+
+        doc.Lines.Clear();
+        doc.Lines.AddRange(result);
+        string relative = Languages.StringFilePath(mod, table.Language);
+        doc.ApplyConvention(ConventionCheck.ExpectedConvention(workspace.Stack, relative, doc.HasNonAsciiText));
+        SafeWrite.Text(doc, Path.Combine(mod.RootPath, relative.Replace('/', Path.DirectorySeparatorChar)));
+        mod.Refresh();
+        return moved.Count;
+    }
+
     /// <summary>How many <c>StringInfo</c> blocks repeat an ID with text that ID already has.</summary>
     public static int CountIdenticalCopies(StringTable table) =>
         table.Duplicates

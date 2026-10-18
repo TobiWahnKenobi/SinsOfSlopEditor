@@ -18,6 +18,7 @@ public sealed record ProblemGroup(string Code, string Title, ProblemSeverity Sev
     {
         ProblemCodes.MissingString => "Import from base game",
         ProblemCodes.WrongValueKind => "Fix obvious ones",
+        ProblemCodes.ScatteredString => "Group them",
         _ => "Fix all",
     };
 }
@@ -65,7 +66,8 @@ public sealed partial class DashboardViewModel : PageViewModel
             .Select(g => new ProblemGroup(g.Key, ProblemCodes.Title(g.Key), g.Max(p => p.Severity),
                 g.Key == ProblemCodes.ConventionMismatch ? workspace.ConventionMismatches.Count : g.Count(),
                 g.First().Message, new ProblemsTarget(g.Key),
-                g.Key is ProblemCodes.ConventionMismatch or ProblemCodes.DuplicateString or ProblemCodes.MissingString or ProblemCodes.WrongValueKind))
+                g.Key is ProblemCodes.ConventionMismatch or ProblemCodes.DuplicateString or ProblemCodes.MissingString or ProblemCodes.WrongValueKind
+                    or ProblemCodes.ScatteredString))
             .OrderByDescending(g => g.Severity)
             .ThenByDescending(g => g.Count)
             .ToList();
@@ -130,6 +132,9 @@ public sealed partial class DashboardViewModel : PageViewModel
             case ProblemCodes.MissingString:
                 await ImportMissingStringsAsync();
                 break;
+            case ProblemCodes.ScatteredString:
+                await GroupScatteredStringsAsync();
+                break;
             case ProblemCodes.WrongValueKind:
                 await FixValuesAsync();
                 break;
@@ -179,6 +184,21 @@ public sealed partial class DashboardViewModel : PageViewModel
 
         int added = await Services.Busy.Current.RunInBackground($"Importing {importable.Count:N0} strings…", _ => StringFixes.ImportStrings(_workspace, importable));
         MessageBox.Show($"Imported {importable.Count:N0} strings ({added:N0} entries including variants).", "Import missing strings");
+        await _reload();
+    }
+
+    private async Task GroupScatteredStringsAsync()
+    {
+        int ids = StringFixes.CountScattered(_workspace.Index.Strings);
+        var answer = MessageBox.Show(
+            $"Group the entries of {ids} string IDs that are defined in several places?\n\n" +
+            "Each ID's later entries move right behind its first one, in their order, so variants (like taunts) are together. " +
+            "No entry is added, removed or changed.",
+            "Group strings", MessageBoxButton.OKCancel, MessageBoxImage.Question);
+        if (answer != MessageBoxResult.OK) return;
+
+        int moved = await Services.Busy.Current.RunInBackground("Grouping strings…", _ => StringFixes.GroupScattered(_workspace));
+        MessageBox.Show($"Moved {moved} entries next to the others of their ID.", "Group strings");
         await _reload();
     }
 
