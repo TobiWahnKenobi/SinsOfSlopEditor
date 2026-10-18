@@ -8,8 +8,8 @@ Sins of Slop Editor is made of three kinds of material, each under its own terms
 | Logos and icons (Sins of Slop Editor logo and icon, LT Design logo) | `src/SinsEditor.App/Assets/App.ico`, `EditorLogo.png`, `Logo.png`, `Logo-White.png`, and the screenshots' copies of them | **All rights reserved** – see [`LICENSE-ASSETS.md`](LICENSE-ASSETS.md) |
 | Third-party libraries and the .NET runtime | compiled into the released `SinsOfSlopEditor.exe`; not part of the source code | their own licences, listed below, with full texts in [`licenses/`](licenses) |
 
-The source code and all graphics of this project were created entirely by AI (Anthropic's Claude), directed by
-Tobias Liebhart / lt-design. See the [README](README.md).
+The source code and the editor's logo and icon were created entirely by AI (Anthropic's Claude), directed by Tobias
+Liebhart / lt-design. The LT Design logo is Tobias Liebhart's own work, made without AI. See the [README](README.md).
 
 ## Third-party components in the released program
 
@@ -37,4 +37,5 @@ The editor reads the files of an installed copy of *Sins of a Solar Empire: Rebe
 the game's shaders and its `ConvertData` tool) from the player's own game folder. None of the game's files are part of
 this repository or of its releases. *Sins of a Solar Empire* is a trademark of Stardock Entertainment and Ironclad
 Games; this project isn't affiliated with or endorsed by them. Screenshots in the documentation show the base game's
-content as seen in the editor.
+content as seen in the editor, only to demonstrate the editor's functions; they will be removed if the rights holders
+ask for it.

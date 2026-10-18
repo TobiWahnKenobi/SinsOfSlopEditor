@@ -25,7 +25,6 @@ shot entity-strings --target "entity:FrigateTechColony@16"
 shot search --search colony
 shot race --target entity:PlayerTechLoyalist
 shot research --target research:PlayerTechLoyalist
-shot research-names --target research:PlayerTechLoyalist --research-field NonCombat --research-names
 shot problems --target problems
 shot brushes --target brushes
 shot brush-editor --target brush:HUDICON_FRIGATE_TECHCOLONY

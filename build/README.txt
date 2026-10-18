@@ -4,8 +4,9 @@ Sins of Slop Editor {VERSION}
 A mod editor for Sins of a Solar Empire: Rebellion.
 
 BUILT ENTIRELY BY AI
-Every line of code and all graphics of this editor were created by Claude (Anthropic). No code was
-written by hand. Tobias Liebhart / lt-design directed and tested it.
+Every line of code and the editor's logo and icon were created by Claude (Anthropic). I didn't write
+any code by hand; I directed and tested it. The LT Design logo is my own work, made without AI.
+- Tobias Liebhart / lt-design
 
 Manual: https://tobiwahnkenobi.github.io/SinsOfSlopEditor/
 Source: https://github.com/TobiWahnKenobi/SinsOfSlopEditor

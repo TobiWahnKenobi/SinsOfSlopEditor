@@ -19,8 +19,6 @@ backdrops, pictures, buttons and arrows, from the race's own `researchScreenData
   has no place on the research screen.
 - **Grid** shows the free cells of every block as dashed boxes; **Names** shows the subjects' names under their icons.
 
-![Research with names](images/research-names.png)
-
 ## Changing it
 
 - **Select** a subject to see its details on the right: field, block, cell, tier, levels, prerequisites and what it

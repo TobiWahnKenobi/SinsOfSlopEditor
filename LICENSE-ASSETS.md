@@ -18,4 +18,5 @@ If you distribute a modified version of the editor, you may keep the logos only 
 Sins of Slop Editor; you must not present it as an official release of lt-design. Replace them with your own artwork if
 in doubt.
 
-The graphics were created by AI (Anthropic's Claude) on behalf of lt-design.
+Who made them: the Sins of Slop Editor logo and icon were created by AI (Anthropic's Claude) for lt-design. The LT Design
+logo is not AI-made: Tobias Liebhart created it himself.

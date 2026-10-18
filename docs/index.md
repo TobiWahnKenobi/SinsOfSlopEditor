@@ -14,8 +14,8 @@ A mod editor for *Sins of a Solar Empire: Rebellion*.
 
 {: .ai }
 > **This editor is completely AI-built.** Every line of code, every test, the build scripts, this manual and all
-> graphics – the logo and the icon – were created by **Claude**, Anthropic's AI. **I didn't write any of the code by
-> hand.** I decided what to build, tried it on my own mods and reported what didn't work; Claude wrote and changed
+> graphics – the editor's logo and icon – were created by **Claude**, Anthropic's AI. **I didn't write any of the code
+> by hand.** (The one exception: my company's LT Design logo, which I made myself, without AI.) I decided what to build, tried it on my own mods and reported what didn't work; Claude wrote and changed
 > everything. Hence the name: it's AI "slop" – tested and useful, but keep that in mind.
 > [More about how it was made](about.html).
 
@@ -54,5 +54,6 @@ The logos and icons are **all rights reserved** and may only be used to build th
 are under the MIT licence ([notices](https://github.com/TobiWahnKenobi/SinsOfSlopEditor/blob/main/THIRD-PARTY-NOTICES.md)).
 
 *Sins of a Solar Empire* is a trademark of Stardock Entertainment and Ironclad Games. This project isn't affiliated
-with or endorsed by them and contains none of the game's files; the screenshots show the base game's content in the
-editor.
+with or endorsed by them and contains none of the game's files. The screenshots in this manual show the base game's
+content only to demonstrate what the editor does. If the rights holders want them removed, please
+[open an issue](https://github.com/TobiWahnKenobi/SinsOfSlopEditor/issues) and I'll take them down.

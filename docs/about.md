@@ -8,7 +8,8 @@ nav_order: 10
 {: .ai }
 > **Sins of Slop Editor is completely AI-built.** All of its source code, its tests, the build scripts, this manual and
 > its graphics – the editor's logo and icon – were created by **Claude**, the AI model made by Anthropic, working as a
-> coding agent (Claude Code). **I didn't write any of the code by hand.**
+> coding agent (Claude Code). **I didn't write any of the code by hand.** The one exception among the graphics is my
+> company's LT Design logo: I made it myself, without AI.
 
 ## How it was made
 
@@ -28,14 +29,16 @@ the way a human author would. Back up your mods, and read the code with that in 
 
 - The source code, tests, scripts and documentation are free software under the
   [GNU General Public License v3.0](https://github.com/TobiWahnKenobi/SinsOfSlopEditor/blob/main/LICENSE).
-- The logos and icons are © Tobias Liebhart / lt-design, **all rights reserved**, and may only be used to build this
+- The logos and icons are © Tobias Liebhart / lt-design, **all rights reserved** (the editor's logo and icon made by
+  Claude, the LT Design logo by me), and may only be used to build this
   editor ([details](https://github.com/TobiWahnKenobi/SinsOfSlopEditor/blob/main/LICENSE-ASSETS.md)).
 - The libraries packed into the program are under the MIT licence; their notices and licence texts are in
   [THIRD-PARTY-NOTICES.md](https://github.com/TobiWahnKenobi/SinsOfSlopEditor/blob/main/THIRD-PARTY-NOTICES.md) and
   the `licenses` folder of every release.
 
 *Sins of a Solar Empire* is a trademark of Stardock Entertainment and Ironclad Games. This project isn't affiliated
-with or endorsed by them and contains none of the game's files.
+with or endorsed by them and contains none of the game's files. The screenshots in this manual show the base game's
+content only to demonstrate what the editor does; if the rights holders want them removed, I'll take them down.
 
 ## Feedback
 

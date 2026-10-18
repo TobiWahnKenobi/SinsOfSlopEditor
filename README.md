@@ -4,8 +4,8 @@
 
 > [!IMPORTANT]
 > **This project is built entirely by AI.** Every line of code, every test, the build scripts, this README, the
-> manual and all graphics (logo, icon) were created by **Claude (Anthropic)**. I didn't write a single line of code by
-> hand. I decided what to build, tested it on my own mods and reported what was wrong; Claude wrote and changed
+> manual and the editor's graphics (its logo and icon) were created by **Claude (Anthropic)**. I didn't write a single
+> line of code by hand. The only exception is my company's LT Design logo, which I made myself, without AI. I decided what to build, tested it on my own mods and reported what was wrong; Claude wrote and changed
 > everything. The name says as much: it's AI "slop" – useful and tested, but read the code with that in mind.
 
 A mod editor for **Sins of a Solar Empire: Rebellion** (Windows). It opens a mod on top of the game and any base mods,
@@ -57,6 +57,8 @@ the game folder (and optionally a test mod); without it they're skipped.
 - Third-party libraries in the release (all MIT): [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md) and [`licenses/`](licenses)
 
 *Sins of a Solar Empire* is a trademark of Stardock Entertainment and Ironclad Games. This project isn't affiliated
-with or endorsed by them, and contains none of the game's files.
+with or endorsed by them, and contains none of the game's files. The screenshots in this README and the manual show the
+game's content only to demonstrate what the editor does; if the rights holders want them removed, please open an issue
+and I'll take them down.
 
 © 2026 Tobias Liebhart / lt-design
