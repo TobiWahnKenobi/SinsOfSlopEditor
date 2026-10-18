@@ -295,6 +295,14 @@ The schema says what each field means, which is what turns raw text into forms, 
    - the exact list must be worked out first (from the game's entity fields the AI reads, e.g. roles and `aiUse…`
      settings, plus known modding guidance), each rule with a short explanation of what the AI does without it.
      Hard to get complete, so start with the well-known stalls and add rules as they're confirmed.
+4. **Editor logo and icon** (from `SinsOfSlopEditor_Icons/logo/export`: the hexagon blueprint with wrench):
+   - `app.ico` as the exe and window icon (`ApplicationIcon` + `Window.Icon`), so taskbar, title bar and Explorer show it;
+   - `logo-512.png` (and `logo-2048.png` where large) as the editor logo in the places that show the LT Design logo now:
+     the start page (180 px), the header (40 px) and the Open mod window (72 px). It has its own colours, so one image
+     works in light and dark themes;
+   - the LT Design logo (`Logo.png` / `Logo-White.png`, per theme) stays, smaller, next to the copyright line on the
+     start page and in the Open mod window, for copyright and brand recognition;
+   - copy only the used exports into `src/SinsEditor.App/Assets`; the proposals and `.DS_Store` files stay out of the repo.
 
 ## Milestones
 
